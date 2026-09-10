@@ -8,12 +8,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/v1")
 public class HealthController {
 
 	@GetMapping("/health")
 	public ResponseEntity<Map<String, String>> health() {
-		return ResponseEntity.ok(Map.of("status", "OK"));
+		return ResponseEntity.ok(Map.of("status", "ok"));
 	}
 
 }

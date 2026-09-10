@@ -1,0 +1,12 @@
+package com.mytastelog.server.exception;
+
+public enum ApiErrorCode {
+	VALIDATION_ERROR,
+	UNAUTHORIZED,
+	FORBIDDEN,
+	NOT_FOUND,
+	CONFLICT,
+	STORAGE_CONFIGURATION_ERROR,
+	STORAGE_ERROR,
+	INTERNAL_ERROR
+}
