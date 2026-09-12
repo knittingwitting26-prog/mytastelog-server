@@ -12,18 +12,16 @@ import org.springframework.test.context.ActiveProfiles;
 	"spring.datasource.url=jdbc:h2:mem:prod-cookie;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE",
 	"spring.datasource.username=sa",
 	"spring.datasource.password=",
-	"spring.datasource.driver-class-name=org.h2.Driver",
-	"naver.local.client-id=test-client-id",
-	"naver.local.client-secret=test-client-secret"
+	"spring.datasource.driver-class-name=org.h2.Driver"
 })
 @ActiveProfiles("prod")
 class ProductionCookieConfigurationTest {
 	@Autowired Environment environment;
 
 	@Test
-	void productionSessionCookieRequiresHttpsAndKeepsHttpOnlyLax() {
+	void productionSessionCookieRequiresHttpsAndAllowsCrossSiteRequests() {
 		assertThat(environment.getProperty("server.servlet.session.cookie.secure", Boolean.class)).isTrue();
 		assertThat(environment.getProperty("server.servlet.session.cookie.http-only", Boolean.class)).isTrue();
-		assertThat(environment.getProperty("server.servlet.session.cookie.same-site")).isEqualTo("lax");
+		assertThat(environment.getProperty("server.servlet.session.cookie.same-site")).isEqualTo("none");
 	}
 }

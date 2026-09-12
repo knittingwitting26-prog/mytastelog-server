@@ -29,10 +29,7 @@ import com.mytastelog.server.revisit.RevisitIntentEntity;
 import jakarta.persistence.EntityManagerFactory;
 
 @ActiveProfiles("test")
-@SpringBootTest(properties = {
-	"naver.local.client-id=test-client-id",
-	"naver.local.client-secret=test-client-secret"
-})
+@SpringBootTest
 @AutoConfigureMockMvc
 class BackendFoundationIntegrationTest {
 	@Autowired MockMvc mockMvc;

@@ -29,10 +29,11 @@ class NaverApiHubLocalSearchClientTest {
 			.defaultHeader("X-NCP-APIGW-API-KEY-ID", "test-id").defaultHeader("X-NCP-APIGW-API-KEY", "test-secret");
 		var server = MockRestServiceServer.bindTo(builder).build();
 		var client = new NaverApiHubLocalSearchClient(builder.build(), properties("test-id", "test-secret"), new ObjectMapper());
-		server.expect(requestTo(org.hamcrest.Matchers.containsString("/search/v1/local"))).andExpect(method(HttpMethod.GET))
+		server.expect(requestTo("https://naverapihub.apigw.ntruss.com/search/v1/local?query=%EC%B9%B4%ED%8E%98&display=5&start=1&sort=comment&format=json"))
+			.andExpect(method(HttpMethod.GET))
 			.andExpect(header("X-NCP-APIGW-API-KEY-ID", "test-id")).andExpect(header("X-NCP-APIGW-API-KEY", "test-secret"))
 			.andExpect(queryParam("display", "5")).andExpect(queryParam("start", "1"))
-			.andExpect(queryParam("sort", "random")).andExpect(queryParam("format", "json"))
+			.andExpect(queryParam("sort", "comment")).andExpect(queryParam("format", "json"))
 			.andRespond(withSuccess("""
 				{"items":[{"title":"<b>스타벅스</b> 한국프레스센터점","category":"카페,디저트>카페",
 				"address":"지번 주소","roadAddress":"도로명 주소","mapx":"1269780493","mapy":"375672475"}]}

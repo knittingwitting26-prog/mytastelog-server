@@ -39,7 +39,7 @@ import com.mytastelog.server.record.RecordVisibility;
 import com.mytastelog.server.revisit.RevisitIntentRepository;
 import com.mytastelog.server.wishlist.WishlistRepository;
 
-@SpringBootTest(properties = {"naver.local.client-id=test", "naver.local.client-secret=test"})
+@SpringBootTest
 @ActiveProfiles("test")
 class PhotoServiceIntegrationTest {
 	@Autowired PhotoService photos;

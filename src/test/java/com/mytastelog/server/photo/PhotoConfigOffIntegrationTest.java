@@ -22,7 +22,6 @@ import com.mytastelog.server.exception.ApiException;
 import com.mytastelog.server.record.RecordVisibility;
 
 @SpringBootTest(properties = {
-	"naver.local.client-id=test", "naver.local.client-secret=test",
 	"app.photo.s3.region=", "app.photo.s3.bucket="
 })
 @ActiveProfiles("test")

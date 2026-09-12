@@ -2,11 +2,10 @@ package com.mytastelog.server;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 
-@SpringBootTest(properties = {
-	"naver.local.client-id=test-client-id",
-	"naver.local.client-secret=test-client-secret"
-})
+@SpringBootTest
+@ActiveProfiles("test")
 class MytastelogServerApplicationTests {
 
 	@Test

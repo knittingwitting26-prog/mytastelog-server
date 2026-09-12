@@ -34,7 +34,7 @@ public class NaverApiHubLocalSearchClient {
 		try {
 			String responseBody = restClient.get().uri(uriBuilder -> uriBuilder.path("/search/v1/local")
 				.queryParam("query", query).queryParam("display", 5).queryParam("start", 1)
-				.queryParam("sort", "random").queryParam("format", "json").build())
+				.queryParam("sort", "comment").queryParam("format", "json").build())
 				.retrieve().onStatus(status -> status.value() == 401 || status.value() == 403,
 					(request, apiResponse) -> { throw new NaverAuthenticationException(
 						"NAVER API HUB 인증에 실패했습니다.", apiResponse.getStatusCode().value(), "authentication"); })

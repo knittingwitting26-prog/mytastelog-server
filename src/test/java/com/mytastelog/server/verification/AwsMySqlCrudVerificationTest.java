@@ -223,9 +223,7 @@ class AwsMySqlCrudVerificationTest {
 		context = new SpringApplicationBuilder(MytastelogServerApplication.class)
 			.profiles("prod").web(WebApplicationType.SERVLET).run(
 				"--spring.flyway.enabled=false", "--spring.jpa.hibernate.ddl-auto=validate", "--server.port=0",
-				"--spring.main.banner-mode=off", "--spring.main.log-startup-info=false", "--logging.level.root=OFF",
-				"--naver.local.client-id=aws-verification-placeholder",
-				"--naver.local.client-secret=aws-verification-placeholder");
+				"--spring.main.banner-mode=off", "--spring.main.log-startup-info=false", "--logging.level.root=OFF");
 		assertThat(context.getBeansOfType(Repository.class)).hasSize(8);
 		jdbc = new JdbcTemplate(context.getBean(DataSource.class));
 		mvc = MockMvcBuilders.webAppContextSetup((WebApplicationContext) context).apply(springSecurity()).build();

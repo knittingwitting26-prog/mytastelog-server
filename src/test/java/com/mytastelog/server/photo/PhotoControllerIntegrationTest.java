@@ -1,10 +1,9 @@
 package com.mytastelog.server.photo;
 
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -24,11 +23,15 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
+import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockHttpSession;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextImpl;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import org.springframework.test.web.servlet.MvcResult;
 
 import com.mytastelog.server.account.AccountEntity;
 import com.mytastelog.server.account.AccountRepository;
@@ -41,13 +44,17 @@ import com.mytastelog.server.archive.dto.ArchiveRequests.CreateWishlistRequest;
 import com.mytastelog.server.diary.DiaryTheme;
 import com.mytastelog.server.record.RecordVisibility;
 
-@SpringBootTest(properties = {"naver.local.client-id=test", "naver.local.client-secret=test"})
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+
+@SpringBootTest
 @ActiveProfiles("test")
 @AutoConfigureMockMvc
 class PhotoControllerIntegrationTest {
 	@Autowired MockMvc mvc;
 	@Autowired ArchiveService archive;
 	@Autowired AccountRepository accounts;
+	@Autowired ObjectMapper objectMapper;
 
 	String owner;
 	String other;
@@ -84,26 +91,65 @@ class PhotoControllerIntegrationTest {
 	@Test
 	void endpointRequiresAuthenticationAndRejectsAnotherOwnerForEveryOperation() throws Exception {
 		String url = "/api/v1/records/" + recordId + "/photo";
-		mvc.perform(get(url)).andExpect(status().isUnauthorized())
+		MockHttpSession ownerSession = authenticatedSession(owner);
+		CsrfExchange ownerCsrf = csrf(ownerSession);
+		mvc.perform(multipart(url).file(jpeg()).session(ownerSession))
+			.andExpect(status().isForbidden()).andExpect(jsonPath("$.error.code").value("FORBIDDEN"));
+		mvc.perform(multipart(url).file(jpeg()).session(ownerSession)
+				.header(ownerCsrf.headerName(), "wrong-token"))
+			.andExpect(status().isForbidden()).andExpect(jsonPath("$.error.code").value("FORBIDDEN"));
+
+		MockHttpSession anonymousSession = new MockHttpSession();
+		CsrfExchange anonymousCsrf = csrf(anonymousSession);
+		mvc.perform(multipart(url).file(jpeg()).session(anonymousSession)
+				.header(anonymousCsrf.headerName(), anonymousCsrf.token()))
+			.andExpect(status().isUnauthorized())
 			.andExpect(jsonPath("$.error.code").value("UNAUTHORIZED"));
-		mvc.perform(multipart(url).file(jpeg()).with(asAccount(other)).with(csrf()))
+
+		MockHttpSession otherSession = authenticatedSession(other);
+		CsrfExchange otherCsrf = csrf(otherSession);
+		mvc.perform(multipart(url).file(jpeg()).session(otherSession)
+				.header(otherCsrf.headerName(), otherCsrf.token()))
 			.andExpect(status().isForbidden()).andExpect(jsonPath("$.error.code").value("FORBIDDEN"));
-		mvc.perform(get(url).with(asAccount(other)))
+		mvc.perform(get(url).session(otherSession))
 			.andExpect(status().isForbidden()).andExpect(jsonPath("$.error.code").value("FORBIDDEN"));
-		mvc.perform(delete(url).with(asAccount(other)).with(csrf()))
+		mvc.perform(delete(url).session(otherSession)
+				.header(otherCsrf.headerName(), otherCsrf.token()))
 			.andExpect(status().isForbidden()).andExpect(jsonPath("$.error.code").value("FORBIDDEN"));
 	}
 
+	@Test
+	void publicPhotoRequiresPublicVisibilityAndClosesImmediatelyWhenMadePrivate() throws Exception {
+		String ownerUrl = "/api/v1/records/" + recordId + "/photo";
+		String publicUrl = "/api/v1/public/records/" + recordId + "/photo";
+		MockHttpSession session = authenticatedSession(owner);
+		CsrfExchange token = csrf(session);
+		mvc.perform(multipart(ownerUrl).file(jpeg()).session(session).header(token.headerName(), token.token()))
+			.andExpect(status().isOk());
+		mvc.perform(get(publicUrl)).andExpect(status().isNotFound());
+		mvc.perform(patch("/api/v1/records/" + recordId).session(session).header(token.headerName(), token.token())
+			.contentType(MediaType.APPLICATION_JSON).content("{\"visibility\":\"public\"}"))
+			.andExpect(status().isOk());
+		mvc.perform(get(publicUrl)).andExpect(status().isOk()).andExpect(content().contentType("image/jpeg"));
+		mvc.perform(patch("/api/v1/records/" + recordId).session(session).header(token.headerName(), token.token())
+			.contentType(MediaType.APPLICATION_JSON).content("{\"visibility\":\"private\"}"))
+			.andExpect(status().isOk());
+		mvc.perform(get(publicUrl)).andExpect(status().isNotFound());
+	}
+
 	private void assertRoundTrip(String url) throws Exception {
-		mvc.perform(multipart(url).file(jpeg()).with(asAccount(owner)).with(csrf()))
+		MockHttpSession session = authenticatedSession(owner);
+		CsrfExchange csrf = csrf(session);
+		mvc.perform(multipart(url).file(jpeg()).session(session).header(csrf.headerName(), csrf.token()))
 			.andExpect(status().isOk()).andExpect(jsonPath("$.data.hasPhoto").value(true))
 			.andExpect(jsonPath("$.data.url").value(url));
-		mvc.perform(get(url).with(asAccount(owner))).andExpect(status().isOk())
+		mvc.perform(get(url).session(session)).andExpect(status().isOk())
 			.andExpect(content().contentType("image/jpeg"))
 			.andExpect(header().string("Cache-Control", "no-store"))
 			.andExpect(content().bytes(jpeg().getBytes()));
-		mvc.perform(delete(url).with(asAccount(owner)).with(csrf())).andExpect(status().isNoContent());
-		mvc.perform(get(url).with(asAccount(owner))).andExpect(status().isNotFound());
+		mvc.perform(delete(url).session(session).header(csrf.headerName(), csrf.token()))
+			.andExpect(status().isNoContent());
+		mvc.perform(get(url).session(session)).andExpect(status().isNotFound());
 	}
 
 	private MockMultipartFile jpeg() {
@@ -111,10 +157,25 @@ class PhotoControllerIntegrationTest {
 			new byte[] {(byte) 0xff, (byte) 0xd8, (byte) 0xff, 1});
 	}
 
-	private RequestPostProcessor asAccount(String accountId) {
-		return authentication(new UsernamePasswordAuthenticationToken(new AuthenticatedAccount(accountId), "n/a",
-			new AuthenticatedAccount(accountId).getAuthorities()));
+	private MockHttpSession authenticatedSession(String accountId) {
+		AuthenticatedAccount principal = new AuthenticatedAccount(accountId);
+		var authentication = new UsernamePasswordAuthenticationToken(principal, "n/a", principal.getAuthorities());
+		MockHttpSession session = new MockHttpSession();
+		session.setAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
+			new SecurityContextImpl(authentication));
+		return session;
 	}
+
+	private CsrfExchange csrf(MockHttpSession session) throws Exception {
+		MvcResult result = mvc.perform(get("/api/v1/auth/csrf").session(session))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.headerName").value("X-CSRF-TOKEN"))
+			.andReturn();
+		JsonNode data = objectMapper.readTree(result.getResponse().getContentAsString()).get("data");
+		return new CsrfExchange(data.get("headerName").asText(), data.get("token").asText());
+	}
+
+	private record CsrfExchange(String headerName, String token) {}
 
 	@TestConfiguration
 	static class Config {

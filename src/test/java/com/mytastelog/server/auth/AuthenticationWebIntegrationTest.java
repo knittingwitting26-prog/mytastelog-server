@@ -45,8 +45,6 @@ import com.mytastelog.server.diary.DiaryRepository;
 import com.mytastelog.server.diary.DiaryTheme;
 
 @SpringBootTest(properties = {
-	"naver.local.client-id=test-client-id",
-	"naver.local.client-secret=test-client-secret",
 	"app.auth.google.client-id=test-google-client",
 	"app.auth.google.client-secret=test-google-secret"
 })
@@ -117,6 +115,14 @@ class AuthenticationWebIntegrationTest {
 		AuthenticatedAccount principal = principal(session);
 		archiveService.createDiary(principal.accountId(),
 			new CreateDiaryRequest("preserved-diary", "Preserved", DiaryTheme.NOTEBOOK));
+		mvc.perform(post("/api/v1/records").session(session).with(csrf())
+			.contentType("application/json")
+			.content("""
+				{"id":"preserved-record","diaryId":"preserved-diary","type":"record","placeId":"place",
+				"placeName":"Persistent","category":"food","date":"2026-09-10","memo":"memo",
+				"address":"Seoul","visibility":"private","visitAt":"2026-09-10T03:00:00Z"}
+				"""))
+			.andExpect(status().isCreated());
 
 		mvc.perform(get("/api/v1/auth/me").session(session)).andExpect(status().isOk());
 		mvc.perform(post("/api/v1/auth/logout").session(session))
@@ -130,9 +136,14 @@ class AuthenticationWebIntegrationTest {
 
 		assertThat(diaries.findByIdAndOwner_Id("preserved-diary", principal.accountId())).isPresent();
 		MockHttpSession relogin = authenticate("logout-subject");
+		assertThat(principal(relogin).accountId()).isEqualTo(principal.accountId());
+		assertThat(accounts.count()).isEqualTo(1);
+		assertThat(diaries.count()).isEqualTo(1);
 		mvc.perform(get("/api/v1/archive").session(relogin))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.data.diaries[0].id").value("preserved-diary"));
+			.andExpect(jsonPath("$.data.diaries[0].id").value("preserved-diary"))
+			.andExpect(jsonPath("$.data.records[0].id").value("preserved-record"))
+			.andExpect(jsonPath("$.data.records[0].ownerId").value(principal.accountId()));
 	}
 
 	@Test

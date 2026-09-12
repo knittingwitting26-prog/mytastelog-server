@@ -39,10 +39,7 @@ import com.mytastelog.server.record.RecordVisibility;
 import com.mytastelog.server.wishlist.WishlistRepository;
 import com.mytastelog.server.revisit.RevisitIntentRepository;
 
-@SpringBootTest(properties = {
-	"naver.local.client-id=test-client-id",
-	"naver.local.client-secret=test-client-secret"
-})
+@SpringBootTest
 @ActiveProfiles("test")
 @AutoConfigureMockMvc
 class ArchiveControllerIntegrationTest {

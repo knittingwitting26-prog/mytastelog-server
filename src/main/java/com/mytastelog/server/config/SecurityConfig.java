@@ -5,6 +5,7 @@ import java.io.IOException;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpMethod;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.security.config.Customizer;
@@ -14,6 +15,7 @@ import org.springframework.security.oauth2.client.endpoint.RestClientAuthorizati
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.web.savedrequest.NullRequestCache;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.csrf.HttpSessionCsrfTokenRepository;
 
 import com.mytastelog.server.auth.AuthProperties;
 import com.mytastelog.server.auth.OAuthAuthenticationFailureHandler;
@@ -37,9 +39,13 @@ public class SecurityConfig {
 		OAuthAuthenticationFailureHandler authenticationFailureHandler,
 		NaverOAuth2UserService naverOAuth2UserService,
 		NaverAuthorizationCodeTokenRequestParametersConverter naverTokenParameters) throws Exception {
+		HttpSessionCsrfTokenRepository csrfTokenRepository = new HttpSessionCsrfTokenRepository();
+		csrfTokenRepository.setHeaderName(CsrfContract.HEADER_NAME);
 		http
 			.cors(Customizer.withDefaults())
+			.csrf(csrf -> csrf.csrfTokenRepository(csrfTokenRepository))
 			.authorizeHttpRequests(authorize -> authorize
+				.requestMatchers(HttpMethod.GET, "/api/v1/public/records", "/api/v1/public/records/**").permitAll()
 				.requestMatchers("/api/v1/health", "/api/v1/places/**", "/api/v1/auth/csrf",
 					"/oauth2/authorization/**", "/login/oauth2/code/**").permitAll()
 				.anyRequest().authenticated())

@@ -9,7 +9,9 @@ spring:
       ddl-auto: validate
 
 server:
+  forward-headers-strategy: framework
   servlet:
     session:
       cookie:
         secure: true
+        same-site: none

@@ -13,6 +13,7 @@ import com.mytastelog.server.collection.CollectionRepository;
 import com.mytastelog.server.exception.ApiErrorCode;
 import com.mytastelog.server.exception.ApiException;
 import com.mytastelog.server.record.RecordRepository;
+import com.mytastelog.server.record.RecordEntity;
 import com.mytastelog.server.wishlist.WishlistRepository;
 
 import jakarta.persistence.EntityManager;
@@ -46,6 +47,11 @@ public class PhotoService {
 	@Transactional(readOnly = true)
 	public PhotoContent readRecord(String accountId, String id) {
 		return read(requireOwned(PhotoEntityType.RECORD, accountId, id));
+	}
+
+	@Transactional(readOnly = true)
+	public PhotoContent readPublicRecord(RecordEntity record) {
+		return read(record);
 	}
 
 	@Transactional

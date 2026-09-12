@@ -21,10 +21,7 @@ import com.mytastelog.server.account.AuthProvider;
 import com.mytastelog.server.account.AuthenticatedAccount;
 import com.mytastelog.server.exception.ApiException;
 
-@SpringBootTest(properties = {
-	"naver.local.client-id=test-client-id",
-	"naver.local.client-secret=test-client-secret"
-})
+@SpringBootTest
 @ActiveProfiles("test")
 class AuthenticationAccountServiceIntegrationTest {
 	@Autowired AuthenticationAccountService service;

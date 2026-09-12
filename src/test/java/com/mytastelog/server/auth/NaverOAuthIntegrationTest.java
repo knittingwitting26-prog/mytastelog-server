@@ -42,8 +42,6 @@ import com.mytastelog.server.record.RecordRepository;
 import com.mytastelog.server.wishlist.WishlistRepository;
 
 @SpringBootTest(properties = {
-	"naver.local.client-id=test-client-id",
-	"naver.local.client-secret=test-client-secret",
 	"app.auth.google.client-id=test-google-client",
 	"app.auth.google.client-secret=test-google-secret",
 	"app.auth.kakao.client-id=test-kakao-client",
@@ -139,6 +137,11 @@ class NaverOAuthIntegrationTest {
 		mvc.perform(get("/api/v1/auth/me")).andExpect(status().isUnauthorized());
 		assertThat(accounts.findById(principal.accountId())).isPresent();
 		assertThat(diaries.findByIdAndOwner_Id("logout-diary", principal.accountId())).isPresent();
+
+		MockHttpSession relogin = authenticateNaver("naver-logout");
+		assertThat(principal(relogin).accountId()).isEqualTo(principal.accountId());
+		assertThat(accounts.count()).isEqualTo(1);
+		assertThat(identities.count()).isEqualTo(1);
 	}
 
 	private MockHttpSession authenticateNaver(String subject) throws Exception {
