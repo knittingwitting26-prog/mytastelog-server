@@ -66,6 +66,7 @@ class BackendFoundationIntegrationTest {
 		assertThat(metamodel.entity(CollectionEntity.class)).isNotNull();
 		assertThat(metamodel.entity(CollectionItemEntity.class)).isNotNull();
 		assertThat(metamodel.entity(RevisitIntentEntity.class)).isNotNull();
+		assertThat(metamodel.entity(com.mytastelog.server.archive.ArchiveImportItemEntity.class)).isNotNull();
 	}
 
 	@Test
@@ -78,13 +79,13 @@ class BackendFoundationIntegrationTest {
 
 		assertThat(tables).contains(
 			"accounts", "account_identities", "diaries", "records", "wishlist",
-			"collections", "collection_items", "archive_item_ids", "revisit_intents", "flyway_schema_history");
+			"collections", "collection_items", "archive_item_ids", "revisit_intents", "archive_import_items", "flyway_schema_history");
 		assertThat(jdbcTemplate.queryForList("""
 			select version
 			from flyway_schema_history
 			where success = true and version is not null
 			order by installed_rank
-			""", String.class)).containsExactly("1", "2", "3", "4", "5");
+			""", String.class)).containsExactly("1", "2", "3", "4", "5", "6");
 		assertThat(jdbcTemplate.queryForObject("""
 			select count(*)
 			from information_schema.columns
