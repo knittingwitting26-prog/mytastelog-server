@@ -13,7 +13,7 @@ public final class PublicRecordResponses {
 
 	public record PublicRecordDetail(
 		String id, String placeId, String placeName, String address, String category,
-		BigDecimal latitude, BigDecimal longitude, BigDecimal rating, String menu, Long price,
+		BigDecimal latitude, BigDecimal longitude, BigDecimal rating, String menu,
 		String photoUrl
 	) {}
 }

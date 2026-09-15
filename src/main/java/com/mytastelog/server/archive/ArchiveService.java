@@ -89,7 +89,7 @@ public class ArchiveService {
 	public ArchiveResponse loadArchive(String accountId) {
 		List<DiaryResponse> diaryResponses = diaries.findAllByOwner_IdOrderByCreatedAtAsc(accountId).stream()
 			.map(com.mytastelog.server.archive.dto.ArchiveDtoMapper::diary).toList();
-		List<RecordResponse> recordResponses = records.findAllByOwner_IdOrderByCreatedAtAsc(accountId).stream()
+		List<RecordResponse> recordResponses = records.findAllByOwner_IdOrderByVisitAtDesc(accountId).stream()
 			.map(com.mytastelog.server.archive.dto.ArchiveDtoMapper::record).toList();
 		List<WishlistResponse> wishlistResponses = wishlistItems.findAllByOwner_IdOrderByCreatedAtAsc(accountId).stream()
 			.map(com.mytastelog.server.archive.dto.ArchiveDtoMapper::wishlist).toList();
@@ -163,12 +163,15 @@ public class ArchiveService {
 		if (request.memoPresent() && request.memo() == null) throw validation("메모는 null일 수 없습니다.", "memo");
 		if (request.visibilityPresent() && request.visibility() == null)
 			throw validation("공개 범위는 필수입니다.", "visibility");
+		if (request.visitAtPresent() && request.visitAt() == null)
+			throw validation("방문일은 필수입니다.", "visitAt");
 		validateRating(request.rating(), request.ratingPresent());
 		if (request.pricePresent() && request.price() != null && request.price() < 0)
 			throw validation("가격은 0 이상이어야 합니다.", "price");
 		entity.update(request.placeNamePresent() ? request.placeName() : entity.getPlaceName(),
 			request.memoPresent() ? request.memo() : entity.getMemo(),
 			request.visibilityPresent() ? request.visibility() : entity.getVisibility(),
+			request.visitAtPresent() ? request.visitAt() : entity.getVisitAt(),
 			request.ratingPresent() ? request.rating() : entity.getRating(),
 			request.menuPresent() ? request.menu() : entity.getMenu(),
 			request.pricePresent() ? request.price() : entity.getPrice());

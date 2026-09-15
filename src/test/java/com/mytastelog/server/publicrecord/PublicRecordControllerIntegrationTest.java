@@ -70,6 +70,7 @@ class PublicRecordControllerIntegrationTest {
 			.andExpect(jsonPath("$.data[0].placeId").value("public-place"))
 			.andExpect(jsonPath("$.data[0].publicRecordCount").value(2))
 			.andExpect(jsonPath("$.data[0].averageRating").value(4.0))
+			.andExpect(jsonPath("$.data[0].price").doesNotExist())
 			.andExpect(jsonPath("$.data[0].memo").doesNotExist())
 			.andExpect(jsonPath("$.data[0].visitAt").doesNotExist())
 			.andExpect(jsonPath("$.data[0].ownerId").doesNotExist());
@@ -85,11 +86,18 @@ class PublicRecordControllerIntegrationTest {
 		mvc.perform(get("/api/v1/public/records/private-record")).andExpect(status().isNotFound());
 		mvc.perform(get("/api/v1/public/records/public-record"))
 			.andExpect(status().isOk()).andExpect(jsonPath("$.data.placeName").value("Public"))
-			.andExpect(jsonPath("$.data.menu").value("menu")).andExpect(jsonPath("$.data.price").value(12000))
+			.andExpect(jsonPath("$.data.address").value("서울"))
+			.andExpect(jsonPath("$.data.rating").value(4.5))
+			.andExpect(jsonPath("$.data.menu").value("menu"))
+			.andExpect(jsonPath("$.data.price").doesNotExist())
 			.andExpect(jsonPath("$.data.memo").doesNotExist()).andExpect(jsonPath("$.data.visitAt").doesNotExist())
 			.andExpect(jsonPath("$.data.ownerId").doesNotExist()).andExpect(jsonPath("$.data.diaryId").doesNotExist());
 		var principal = new AuthenticatedAccount(owner);
 		var auth = new UsernamePasswordAuthenticationToken(principal, "n/a", principal.getAuthorities());
+		mvc.perform(get("/api/v1/archive").with(authentication(auth)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.records[1].id").value("public-record"))
+			.andExpect(jsonPath("$.data.records[1].price").value(12000));
 		mvc.perform(patch("/api/v1/records/public-record").with(authentication(auth)).with(csrf())
 			.contentType(MediaType.APPLICATION_JSON).content("{\"visibility\":\"private\"}"))
 			.andExpect(status().isOk());

@@ -62,7 +62,7 @@ public class PublicRecordService {
 			? "/api/v1/public/records/" + record.getId() + "/photo" : null;
 		return new PublicRecordDetail(record.getId(), record.getPlaceId(), record.getPlaceName(), record.getAddress(),
 			record.getCategory(), record.getLatitude(), record.getLongitude(), record.getRating(), record.getMenu(),
-			record.getPrice(), photoUrl);
+			photoUrl);
 	}
 
 	@Transactional(readOnly = true)

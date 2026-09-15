@@ -46,10 +46,11 @@ public class RecordEntity extends PlaceArchiveEntity {
 		this.visitAt = visitAt;
 	}
 
-	public void update(String placeName, String memo, RecordVisibility visibility,
+	public void update(String placeName, String memo, RecordVisibility visibility, Instant visitAt,
 		BigDecimal rating, String menu, Long price) {
 		updateEditableFields(placeName, memo, rating, menu, price);
 		this.visibility = visibility;
+		this.visitAt = visitAt;
 	}
 
 	public RecordVisibility getVisibility() { return visibility; }

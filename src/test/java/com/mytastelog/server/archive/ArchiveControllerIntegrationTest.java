@@ -103,9 +103,13 @@ class ArchiveControllerIntegrationTest {
 			.andExpect(jsonPath("$.data.longitude").value(126.978))
 			.andExpect(jsonPath("$.data.visitAt").value("2026-09-08T03:00:00Z"));
 		mvc.perform(patch("/api/v1/records/record-a").with(account).with(csrf()).contentType(MediaType.APPLICATION_JSON)
-			.content("{\"placeName\":\"Updated\",\"rating\":null,\"price\":0}"))
+			.content("{\"placeName\":\"Updated\",\"visitAt\":\"2026-08-20T15:00:00Z\",\"rating\":null,\"price\":0}"))
 			.andExpect(status().isOk()).andExpect(jsonPath("$.data.placeName").value("Updated"))
+			.andExpect(jsonPath("$.data.visitAt").value("2026-08-20T15:00:00Z"))
 			.andExpect(jsonPath("$.data.rating").doesNotExist());
+		mvc.perform(get("/api/v1/archive").with(account))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.records[0].visitAt").value("2026-08-20T15:00:00Z"));
 
 		mvc.perform(post("/api/v1/wishlist").with(account).with(csrf()).contentType(MediaType.APPLICATION_JSON)
 			.content(wishlistJson("wish-a", "diary-a")))
@@ -157,6 +161,27 @@ class ArchiveControllerIntegrationTest {
 		mvc.perform(delete("/api/v1/collections/collection-b").with(account).with(csrf()))
 			.andExpect(status().isNoContent());
 		org.assertj.core.api.Assertions.assertThat(records.findById("record-converted")).isPresent();
+	}
+
+	@Test
+	void archiveRecordsAreOrderedByVisitAtDescendingInsteadOfCreationTime() throws Exception {
+		String accountId = account();
+		RequestPostProcessor account = asAccount(accountId);
+		service.createDiary(accountId, new CreateDiaryRequest("diary-a", "Diary", DiaryTheme.NOTEBOOK));
+
+		mvc.perform(post("/api/v1/records").with(account).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+			.content(recordJson("created-first-visited-old", "diary-a")
+				.replace("2026-09-08T03:00:00Z", "2026-08-20T00:00:00Z")))
+			.andExpect(status().isCreated());
+		mvc.perform(post("/api/v1/records").with(account).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+			.content(recordJson("created-last-visited-new", "diary-a")
+				.replace("2026-09-08T03:00:00Z", "2026-09-10T00:00:00Z")))
+			.andExpect(status().isCreated());
+
+		mvc.perform(get("/api/v1/archive").with(account))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.records[0].id").value("created-last-visited-new"))
+			.andExpect(jsonPath("$.data.records[1].id").value("created-first-visited-old"));
 	}
 
 	@Test

@@ -71,12 +71,14 @@ public final class ArchiveRequests {
 		private String placeName;
 		private String memo;
 		private RecordVisibility visibility;
+		private Instant visitAt;
 		private BigDecimal rating;
 		private String menu;
 		private Long price;
 		private boolean placeNamePresent;
 		private boolean memoPresent;
 		private boolean visibilityPresent;
+		private boolean visitAtPresent;
 		private boolean ratingPresent;
 		private boolean menuPresent;
 		private boolean pricePresent;
@@ -84,18 +86,21 @@ public final class ArchiveRequests {
 		@JsonSetter public void setPlaceName(String value) { placeName = value; placeNamePresent = true; }
 		@JsonSetter public void setMemo(String value) { memo = value; memoPresent = true; }
 		@JsonSetter public void setVisibility(RecordVisibility value) { visibility = value; visibilityPresent = true; }
+		@JsonSetter public void setVisitAt(Instant value) { visitAt = value; visitAtPresent = true; }
 		@JsonSetter public void setRating(BigDecimal value) { rating = value; ratingPresent = true; }
 		@JsonSetter public void setMenu(String value) { menu = value; menuPresent = true; }
 		@JsonSetter public void setPrice(Long value) { price = value; pricePresent = true; }
 		public String placeName() { return placeName; }
 		public String memo() { return memo; }
 		public RecordVisibility visibility() { return visibility; }
+		public Instant visitAt() { return visitAt; }
 		public BigDecimal rating() { return rating; }
 		public String menu() { return menu; }
 		public Long price() { return price; }
 		public boolean placeNamePresent() { return placeNamePresent; }
 		public boolean memoPresent() { return memoPresent; }
 		public boolean visibilityPresent() { return visibilityPresent; }
+		public boolean visitAtPresent() { return visitAtPresent; }
 		public boolean ratingPresent() { return ratingPresent; }
 		public boolean menuPresent() { return menuPresent; }
 		public boolean pricePresent() { return pricePresent; }

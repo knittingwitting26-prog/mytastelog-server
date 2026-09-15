@@ -11,7 +11,7 @@ import org.springframework.data.repository.query.Param;
 public interface RecordRepository extends JpaRepository<RecordEntity, String> {
 	Optional<RecordEntity> findByIdAndOwner_Id(String id, String ownerId);
 	boolean existsByIdAndOwner_Id(String id, String ownerId);
-	List<RecordEntity> findAllByOwner_IdOrderByCreatedAtAsc(String ownerId);
+	List<RecordEntity> findAllByOwner_IdOrderByVisitAtDesc(String ownerId);
 	boolean existsByOwner_IdAndDiary_IdAndPlaceId(String ownerId, String diaryId, String placeId);
 	List<RecordEntity> findAllByVisibilityOrderByCreatedAtDesc(RecordVisibility visibility, Pageable pageable);
 
