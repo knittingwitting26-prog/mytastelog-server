@@ -207,6 +207,53 @@ class ArchiveControllerIntegrationTest {
 	}
 
 	@Test
+	void menusOmittedAndExplicitEmptyRemainDistinctAcrossJsonContract() throws Exception {
+		String accountId = account();
+		RequestPostProcessor account = asAccount(accountId);
+		service.createDiary(accountId, new CreateDiaryRequest("diary-a", "Diary", DiaryTheme.NOTEBOOK));
+
+		mvc.perform(post("/api/v1/records").with(account).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+			.content(recordJson("record-menu", "diary-a").replace("\"price\":12000",
+				"\"menu\":\"legacy\",\"price\":12000")))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.data.menus.length()").value(1))
+			.andExpect(jsonPath("$.data.menus[0].name").value("legacy"));
+
+		mvc.perform(patch("/api/v1/records/record-menu").with(account).with(csrf())
+			.contentType(MediaType.APPLICATION_JSON).content("{\"memo\":\"menus omitted\"}"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.menus.length()").value(1));
+
+		mvc.perform(patch("/api/v1/records/record-menu").with(account).with(csrf())
+			.contentType(MediaType.APPLICATION_JSON).content("{\"menus\":[]}"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.menus.length()").value(0))
+			.andExpect(jsonPath("$.data.menu").doesNotExist())
+			.andExpect(jsonPath("$.data.price").doesNotExist());
+	}
+
+	@Test
+	void menusJsonContractValidatesNestedNamesAndMaximumCount() throws Exception {
+		String accountId = account();
+		RequestPostProcessor account = asAccount(accountId);
+		service.createDiary(accountId, new CreateDiaryRequest("diary-a", "Diary", DiaryTheme.NOTEBOOK));
+		String base = recordJson("invalid-menu", "diary-a").stripTrailing().replaceFirst("}$", "");
+
+		mvc.perform(post("/api/v1/records").with(account).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+			.content(base + ",\"menus\":[{\"id\":\"menu-a\",\"name\":\"  \"}]}"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+
+		String eleven = java.util.stream.IntStream.range(0, 11)
+			.mapToObj(index -> "{\"id\":\"menu-" + index + "\",\"name\":\"M" + index + "\"}")
+			.collect(java.util.stream.Collectors.joining(","));
+		mvc.perform(post("/api/v1/records").with(account).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+			.content(base.replace("invalid-menu", "too-many-menus") + ",\"menus\":[" + eleven + "]}"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+	}
+
+	@Test
 	void bootstrapIsOwnerScopedAndForeignOrUnknownFieldsReturnContractErrors() throws Exception {
 		String ownerA = account();
 		String ownerB = account();

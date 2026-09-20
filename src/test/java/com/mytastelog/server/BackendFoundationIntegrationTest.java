@@ -23,6 +23,7 @@ import com.mytastelog.server.collection.CollectionEntity;
 import com.mytastelog.server.collection.CollectionItemEntity;
 import com.mytastelog.server.diary.DiaryEntity;
 import com.mytastelog.server.record.RecordEntity;
+import com.mytastelog.server.record.RecordMenuEntity;
 import com.mytastelog.server.wishlist.WishlistEntity;
 import com.mytastelog.server.revisit.RevisitIntentEntity;
 
@@ -62,6 +63,7 @@ class BackendFoundationIntegrationTest {
 		assertThat(metamodel.entity(AccountIdentityEntity.class)).isNotNull();
 		assertThat(metamodel.entity(DiaryEntity.class)).isNotNull();
 		assertThat(metamodel.entity(RecordEntity.class)).isNotNull();
+		assertThat(metamodel.entity(RecordMenuEntity.class)).isNotNull();
 		assertThat(metamodel.entity(WishlistEntity.class)).isNotNull();
 		assertThat(metamodel.entity(CollectionEntity.class)).isNotNull();
 		assertThat(metamodel.entity(CollectionItemEntity.class)).isNotNull();
@@ -79,13 +81,14 @@ class BackendFoundationIntegrationTest {
 
 		assertThat(tables).contains(
 			"accounts", "account_identities", "diaries", "records", "wishlist",
-			"collections", "collection_items", "archive_item_ids", "revisit_intents", "archive_import_items", "flyway_schema_history");
+			"collections", "collection_items", "archive_item_ids", "revisit_intents", "archive_import_items",
+			"record_menus", "flyway_schema_history");
 		assertThat(jdbcTemplate.queryForList("""
 			select version
 			from flyway_schema_history
 			where success = true and version is not null
 			order by installed_rank
-			""", String.class)).containsExactly("1", "2", "3", "4", "5", "6", "7");
+			""", String.class)).containsExactly("1", "2", "3", "4", "5", "6", "7", "8");
 		assertThat(jdbcTemplate.queryForObject("""
 			select count(*)
 			from information_schema.columns

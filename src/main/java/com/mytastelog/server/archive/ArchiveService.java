@@ -2,17 +2,18 @@ package com.mytastelog.server.archive;
 
 import static com.mytastelog.server.archive.dto.ArchiveDtoMapper.collection;
 import static com.mytastelog.server.archive.dto.ArchiveDtoMapper.diary;
-import static com.mytastelog.server.archive.dto.ArchiveDtoMapper.record;
 import static com.mytastelog.server.archive.dto.ArchiveDtoMapper.wishlist;
 import static com.mytastelog.server.archive.dto.ArchiveDtoMapper.revisit;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -29,6 +30,7 @@ import com.mytastelog.server.archive.dto.ArchiveRequests.CreateRecordRequest;
 import com.mytastelog.server.archive.dto.ArchiveRequests.CreateWishlistRequest;
 import com.mytastelog.server.archive.dto.ArchiveRequests.CreateRevisitIntentRequest;
 import com.mytastelog.server.archive.dto.ArchiveRequests.ReplaceCollectionOrderRequest;
+import com.mytastelog.server.archive.dto.ArchiveRequests.RecordMenuRequest;
 import com.mytastelog.server.archive.dto.ArchiveRequests.UpdateCollectionRequest;
 import com.mytastelog.server.archive.dto.ArchiveRequests.UpdateDiaryRequest;
 import com.mytastelog.server.archive.dto.ArchiveRequests.UpdateRecordRequest;
@@ -50,6 +52,8 @@ import com.mytastelog.server.diary.DiaryRepository;
 import com.mytastelog.server.exception.ApiErrorCode;
 import com.mytastelog.server.exception.ApiException;
 import com.mytastelog.server.record.RecordEntity;
+import com.mytastelog.server.record.RecordMenuEntity;
+import com.mytastelog.server.record.RecordMenuRepository;
 import com.mytastelog.server.record.RecordRepository;
 import com.mytastelog.server.record.RecordVisibility;
 import com.mytastelog.server.photo.PhotoService;
@@ -63,6 +67,7 @@ public class ArchiveService {
 	private final AccountRepository accounts;
 	private final DiaryRepository diaries;
 	private final RecordRepository records;
+	private final RecordMenuRepository recordMenus;
 	private final WishlistRepository wishlistItems;
 	private final CollectionRepository collections;
 	private final CollectionItemRepository collectionItems;
@@ -71,12 +76,14 @@ public class ArchiveService {
 	private final PhotoService photos;
 
 	public ArchiveService(AccountRepository accounts, DiaryRepository diaries, RecordRepository records,
+		RecordMenuRepository recordMenus,
 		WishlistRepository wishlistItems, CollectionRepository collections,
 		CollectionItemRepository collectionItems, GlobalItemIdRepository globalItemIds,
 		RevisitIntentRepository revisitIntents, PhotoService photos) {
 		this.accounts = accounts;
 		this.diaries = diaries;
 		this.records = records;
+		this.recordMenus = recordMenus;
 		this.wishlistItems = wishlistItems;
 		this.collections = collections;
 		this.collectionItems = collectionItems;
@@ -90,7 +97,7 @@ public class ArchiveService {
 		List<DiaryResponse> diaryResponses = diaries.findAllByOwner_IdOrderByCreatedAtAsc(accountId).stream()
 			.map(com.mytastelog.server.archive.dto.ArchiveDtoMapper::diary).toList();
 		List<RecordResponse> recordResponses = records.findAllByOwner_IdOrderByVisitAtDesc(accountId).stream()
-			.map(com.mytastelog.server.archive.dto.ArchiveDtoMapper::record).toList();
+			.map(this::toRecord).toList();
 		List<WishlistResponse> wishlistResponses = wishlistItems.findAllByOwner_IdOrderByCreatedAtAsc(accountId).stream()
 			.map(com.mytastelog.server.archive.dto.ArchiveDtoMapper::wishlist).toList();
 		List<CollectionResponse> collectionResponses = collections.findAllByOwner_IdOrderByDiary_IdAscPositionAsc(accountId)
@@ -138,21 +145,25 @@ public class ArchiveService {
 	public CreateResult<RecordResponse> createRecord(String accountId, CreateRecordRequest request) {
 		requireLiteral(request.type(), "record", "type");
 		validateCoordinates(request.latitude(), request.longitude());
+		List<MenuValue> menus = request.menus() == null
+			? legacyMenus(request.id(), request.menu(), request.price()) : normalizeMenus(request.menus());
 		DiaryEntity diary = requireDiaryForUpdate(accountId, request.diaryId());
 		var existingRecord = records.findById(request.id());
 		if (existingRecord.isPresent()) {
 			RecordEntity entity = existingRecord.get();
-			if (sameRecord(entity, accountId, request)) return new CreateResult<>(record(entity), false);
+			if (sameRecord(entity, accountId, request, menus)) return new CreateResult<>(toRecord(entity), false);
 			throw itemIdConflict();
 		}
 		if (wishlistItems.existsById(request.id())) throw itemIdConflict();
 		registerItemId(request.id(), diary.getOwner(), ArchiveItemType.RECORD);
+		MenuProjection projection = project(menus);
 		RecordEntity entity = records.saveAndFlush(new RecordEntity(request.id(), diary.getOwner(), diary,
 			request.placeId(), request.placeName(), request.category(), request.date(), request.memo(), request.address(),
-			request.latitude(), request.longitude(), request.rating(), request.menu(), request.price(), request.note(),
+			request.latitude(), request.longitude(), request.rating(), projection.name(), projection.price(), request.note(),
 			request.photo(), request.visibility(), request.visitAt()));
+		replaceMenus(entity, menus);
 		consumeWishlistForPlace(accountId, entity);
-		return new CreateResult<>(record(entity), true);
+		return new CreateResult<>(toRecord(entity), true);
 	}
 
 	@Transactional
@@ -168,15 +179,26 @@ public class ArchiveService {
 		validateRating(request.rating(), request.ratingPresent());
 		if (request.pricePresent() && request.price() != null && request.price() < 0)
 			throw validation("가격은 0 이상이어야 합니다.", "price");
+		List<MenuValue> replacement = null;
+		if (request.menusPresent()) {
+			if (request.menus() == null) throw validation("menus는 null일 수 없습니다.", "menus");
+			replacement = normalizeMenus(request.menus());
+		} else if (request.menuPresent() || request.pricePresent()) {
+			replacement = legacyMenus(entity.getId(),
+				request.menuPresent() ? request.menu() : entity.getMenu(),
+				request.pricePresent() ? request.price() : entity.getPrice());
+		}
+		MenuProjection projection = replacement == null
+			? new MenuProjection(entity.getMenu(), entity.getPrice()) : project(replacement);
 		entity.update(request.placeNamePresent() ? request.placeName() : entity.getPlaceName(),
 			request.memoPresent() ? request.memo() : entity.getMemo(),
 			request.visibilityPresent() ? request.visibility() : entity.getVisibility(),
 			request.visitAtPresent() ? request.visitAt() : entity.getVisitAt(),
 			request.ratingPresent() ? request.rating() : entity.getRating(),
-			request.menuPresent() ? request.menu() : entity.getMenu(),
-			request.pricePresent() ? request.price() : entity.getPrice());
+			projection.name(), projection.price());
 		records.saveAndFlush(entity);
-		return record(entity);
+		if (replacement != null) replaceMenus(entity, replacement);
+		return toRecord(entity);
 	}
 
 	@Transactional(isolation = Isolation.READ_COMMITTED)
@@ -338,6 +360,12 @@ public class ArchiveService {
 		WishlistEntity source = requireWishlist(accountId, wishlistId);
 		requireDiaryForUpdate(accountId, source.getDiary().getId());
 		validateCoordinates(request.latitude(), request.longitude());
+		List<MenuValue> menus = request.menus() == null
+			? legacyMenus(request.id(),
+				request.menu() != null ? request.menu() : source.getMenu(),
+				request.price() != null ? request.price() : source.getPrice())
+			: normalizeMenus(request.menus());
+		MenuProjection projection = project(menus);
 		if (records.existsById(request.id()) || wishlistItems.existsById(request.id())) throw itemIdConflict();
 		registerItemId(request.id(), source.getOwner(), ArchiveItemType.RECORD);
 		List<CollectionItemEntity> memberships = collectionItems.findById_ItemIdOrderByCollection_IdAsc(wishlistId);
@@ -351,8 +379,10 @@ public class ArchiveService {
 		RecordEntity created = records.save(new RecordEntity(request.id(), source.getOwner(), source.getDiary(),
 			request.placeId(), request.placeName(), request.category(), request.date(), request.memo(), request.address(),
 			request.latitude() != null ? request.latitude() : source.getLatitude(),
-			request.longitude() != null ? request.longitude() : source.getLongitude(), request.rating(), request.menu(),
-			request.price(), request.note(), transferredPhoto, request.visibility(), request.visitAt()));
+			request.longitude() != null ? request.longitude() : source.getLongitude(), request.rating(), projection.name(),
+			projection.price(), request.note(), transferredPhoto, request.visibility(), request.visitAt()));
+		records.flush();
+		replaceMenus(created, menus);
 		List<CollectionEntity> changed = new ArrayList<>();
 		for (CollectionItemEntity membership : memberships) {
 			CollectionEntity target = membership.getCollection();
@@ -372,7 +402,7 @@ public class ArchiveService {
 		wishlistItems.flush();
 		collections.saveAllAndFlush(changed);
 		consumeWishlistForPlace(accountId, created);
-		return new ConvertWishlistResponse(record(created), changed.stream().map(this::toCollection).toList());
+		return new ConvertWishlistResponse(toRecord(created), changed.stream().map(this::toCollection).toList());
 	}
 
 	private void consumeWishlistForPlace(String accountId, RecordEntity record) {
@@ -501,17 +531,90 @@ public class ArchiveService {
 		return collection(entity, itemIds);
 	}
 
-	private boolean sameRecord(RecordEntity entity, String accountId, CreateRecordRequest request) {
+	private boolean sameRecord(RecordEntity entity, String accountId, CreateRecordRequest request, List<MenuValue> menus) {
+		MenuProjection projection = project(menus);
 		return entity.getOwner().getId().equals(accountId) && entity.getDiary().getId().equals(request.diaryId())
 			&& entity.getPlaceId().equals(request.placeId()) && entity.getPlaceName().equals(request.placeName())
 			&& entity.getCategory().equals(request.category()) && entity.getDateDisplay().equals(request.date())
 			&& entity.getMemo().equals(request.memo()) && entity.getAddress().equals(request.address())
 			&& decimalEquals(entity.getLatitude(), request.latitude()) && decimalEquals(entity.getLongitude(), request.longitude())
-			&& decimalEquals(entity.getRating(), request.rating()) && Objects.equals(entity.getMenu(), request.menu())
-			&& Objects.equals(entity.getPrice(), request.price()) && Objects.equals(entity.getNote(), request.note())
+			&& decimalEquals(entity.getRating(), request.rating()) && Objects.equals(entity.getMenu(), projection.name())
+			&& Objects.equals(entity.getPrice(), projection.price()) && sameMenus(entity, menus)
+			&& Objects.equals(entity.getNote(), request.note())
 			&& Objects.equals(entity.getPhotoReference(), request.photo()) && entity.getVisibility() == request.visibility()
 			&& entity.getVisitAt().equals(request.visitAt());
 	}
+
+	private RecordResponse toRecord(RecordEntity entity) {
+		return com.mytastelog.server.archive.dto.ArchiveDtoMapper.record(entity,
+			recordMenus.findByRecord_IdOrderByPositionAsc(entity.getId()));
+	}
+
+	private List<MenuValue> normalizeMenus(List<RecordMenuRequest> requested) {
+		if (requested.size() > 10) throw validation("메뉴는 최대 10개까지 저장할 수 있습니다.", "menus");
+		Set<String> ids = new HashSet<>();
+		List<MenuValue> normalized = new ArrayList<>();
+		for (int index = 0; index < requested.size(); index++) {
+			RecordMenuRequest menu = requested.get(index);
+			if (menu == null) throw validation("메뉴는 null일 수 없습니다.", "menus");
+			if (menu.id() == null || menu.id().isBlank() || menu.id().length() > 128)
+				throw validation("메뉴 ID는 128자 이하의 필수 값입니다.", "menus.id");
+			if (!ids.add(menu.id())) throw conflict("메뉴 ID가 중복되었습니다.", "menus.id");
+			if (menu.name() == null || menu.name().isBlank() || menu.name().length() > 300)
+				throw validation("메뉴 이름은 300자 이하의 필수 값입니다.", "menus.name");
+			if (menu.price() != null && menu.price() < 0)
+				throw validation("메뉴 가격은 0 이상이어야 합니다.", "menus.price");
+			normalized.add(new MenuValue(menu.id(), menu.name(), menu.price(), index));
+		}
+		return normalized;
+	}
+
+	private List<MenuValue> legacyMenus(String recordId, String name, Long price) {
+		if ((name == null || name.isBlank()) && price == null) return List.of();
+		return List.of(new MenuValue(legacyMenuId(recordId), name == null || name.isBlank() ? null : name, price, 0));
+	}
+
+	private String legacyMenuId(String recordId) {
+		return UUID.nameUUIDFromBytes(("mytastelog:record-menu:" + recordId)
+			.getBytes(StandardCharsets.UTF_8)).toString();
+	}
+
+	private MenuProjection project(List<MenuValue> menus) {
+		return menus.isEmpty() ? new MenuProjection(null, null)
+			: new MenuProjection(menus.get(0).name(), menus.get(0).price());
+	}
+
+	private boolean sameMenus(RecordEntity entity, List<MenuValue> expected) {
+		List<RecordMenuEntity> actual = recordMenus.findByRecord_IdOrderByPositionAsc(entity.getId());
+		if (actual.size() != expected.size()) return false;
+		for (int index = 0; index < actual.size(); index++) {
+			RecordMenuEntity left = actual.get(index);
+			MenuValue right = expected.get(index);
+			if (!left.getId().equals(right.id()) || !Objects.equals(left.getName(), right.name())
+				|| !Objects.equals(left.getPrice(), right.price()) || left.getPosition() != right.position()) return false;
+		}
+		return true;
+	}
+
+	private void replaceMenus(RecordEntity record, List<MenuValue> menus) {
+		for (MenuValue menu : menus) {
+			recordMenus.findById(menu.id()).ifPresent(existing -> {
+				if (!existing.getRecord().getId().equals(record.getId()))
+					throw conflict("이미 다른 Record에서 사용 중인 메뉴 ID입니다.", "menus.id");
+			});
+		}
+		recordMenus.deleteAll(recordMenus.findByRecord_IdOrderByPositionAsc(record.getId()));
+		recordMenus.flush();
+		if (!menus.isEmpty()) {
+			recordMenus.saveAll(menus.stream()
+				.map(menu -> new RecordMenuEntity(menu.id(), record, menu.name(), menu.price(), menu.position()))
+				.toList());
+			recordMenus.flush();
+		}
+	}
+
+	private record MenuValue(String id, String name, Long price, int position) {}
+	private record MenuProjection(String name, Long price) {}
 
 	private boolean sameWishlist(WishlistEntity entity, String accountId, CreateWishlistRequest request) {
 		return entity.getOwner().getId().equals(accountId) && entity.getDiary().getId().equals(request.diaryId())

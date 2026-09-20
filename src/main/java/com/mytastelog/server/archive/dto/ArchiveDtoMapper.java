@@ -5,11 +5,13 @@ import java.util.List;
 import com.mytastelog.server.archive.dto.ArchiveResponses.CollectionResponse;
 import com.mytastelog.server.archive.dto.ArchiveResponses.DiaryResponse;
 import com.mytastelog.server.archive.dto.ArchiveResponses.RecordResponse;
+import com.mytastelog.server.archive.dto.ArchiveResponses.RecordMenuResponse;
 import com.mytastelog.server.archive.dto.ArchiveResponses.WishlistResponse;
 import com.mytastelog.server.archive.dto.ArchiveResponses.RevisitIntentResponse;
 import com.mytastelog.server.collection.CollectionEntity;
 import com.mytastelog.server.diary.DiaryEntity;
 import com.mytastelog.server.record.RecordEntity;
+import com.mytastelog.server.record.RecordMenuEntity;
 import com.mytastelog.server.wishlist.WishlistEntity;
 import com.mytastelog.server.revisit.RevisitIntentEntity;
 
@@ -22,12 +24,16 @@ public final class ArchiveDtoMapper {
 			entity.getCreatedAt(), entity.getUpdatedAt());
 	}
 
-	public static RecordResponse record(RecordEntity entity) {
+	public static RecordResponse record(RecordEntity entity, List<RecordMenuEntity> menus) {
 		return new RecordResponse(entity.getId(), entity.getOwner().getId(), entity.getDiary().getId(),
 			entity.getPlaceId(), entity.getPlaceName(), entity.getCategory(), entity.getDateDisplay(), entity.getMemo(),
 			entity.getAddress(), entity.getLatitude(), entity.getLongitude(), entity.getRating(), entity.getMenu(), entity.getPrice(), entity.getNote(),
 			entity.getPhotoReference(), entity.getCreatedAt(), entity.getUpdatedAt(), "record",
-			entity.getVisibility(), entity.getVisitAt());
+			entity.getVisibility(), entity.getVisitAt(), menus.stream().map(ArchiveDtoMapper::recordMenu).toList());
+	}
+
+	public static RecordMenuResponse recordMenu(RecordMenuEntity entity) {
+		return new RecordMenuResponse(entity.getId(), entity.getName(), entity.getPrice(), entity.getPosition());
 	}
 
 	public static WishlistResponse wishlist(WishlistEntity entity) {

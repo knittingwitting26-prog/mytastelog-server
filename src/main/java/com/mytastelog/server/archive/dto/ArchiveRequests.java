@@ -14,6 +14,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.Valid;
 
 public final class ArchiveRequests {
 	private ArchiveRequests() {
@@ -57,15 +58,31 @@ public final class ArchiveRequests {
 		String menu,
 		@PositiveOrZero Long price,
 		String note,
-		String photo
+		String photo,
+		@Size(max = 10) List<@Valid RecordMenuRequest> menus
 	) {
 		public CreateRecordRequest(String id, String diaryId, String type, String placeId, String placeName,
 			String category, String date, String memo, String address, RecordVisibility visibility, Instant visitAt,
 			BigDecimal rating, String menu, Long price, String note, String photo) {
 			this(id, diaryId, type, placeId, placeName, category, date, memo, address, null, null,
-				visibility, visitAt, rating, menu, price, note, photo);
+				visibility, visitAt, rating, menu, price, note, photo, null);
+		}
+
+		public CreateRecordRequest(String id, String diaryId, String type, String placeId, String placeName,
+			String category, String date, String memo, String address, BigDecimal latitude, BigDecimal longitude,
+			RecordVisibility visibility, Instant visitAt, BigDecimal rating, String menu, Long price, String note,
+			String photo) {
+			this(id, diaryId, type, placeId, placeName, category, date, memo, address, latitude, longitude,
+				visibility, visitAt, rating, menu, price, note, photo, null);
 		}
 	}
+
+	public record RecordMenuRequest(
+		@NotBlank @Size(max = 128) String id,
+		@NotBlank @Size(max = 300) String name,
+		@PositiveOrZero Long price,
+		Integer position
+	) {}
 
 	public static final class UpdateRecordRequest {
 		private String placeName;
@@ -75,6 +92,7 @@ public final class ArchiveRequests {
 		private BigDecimal rating;
 		private String menu;
 		private Long price;
+		private List<RecordMenuRequest> menus;
 		private boolean placeNamePresent;
 		private boolean memoPresent;
 		private boolean visibilityPresent;
@@ -82,6 +100,7 @@ public final class ArchiveRequests {
 		private boolean ratingPresent;
 		private boolean menuPresent;
 		private boolean pricePresent;
+		private boolean menusPresent;
 
 		@JsonSetter public void setPlaceName(String value) { placeName = value; placeNamePresent = true; }
 		@JsonSetter public void setMemo(String value) { memo = value; memoPresent = true; }
@@ -90,6 +109,7 @@ public final class ArchiveRequests {
 		@JsonSetter public void setRating(BigDecimal value) { rating = value; ratingPresent = true; }
 		@JsonSetter public void setMenu(String value) { menu = value; menuPresent = true; }
 		@JsonSetter public void setPrice(Long value) { price = value; pricePresent = true; }
+		@JsonSetter public void setMenus(List<RecordMenuRequest> value) { menus = value; menusPresent = true; }
 		public String placeName() { return placeName; }
 		public String memo() { return memo; }
 		public RecordVisibility visibility() { return visibility; }
@@ -97,6 +117,7 @@ public final class ArchiveRequests {
 		public BigDecimal rating() { return rating; }
 		public String menu() { return menu; }
 		public Long price() { return price; }
+		public List<RecordMenuRequest> menus() { return menus; }
 		public boolean placeNamePresent() { return placeNamePresent; }
 		public boolean memoPresent() { return memoPresent; }
 		public boolean visibilityPresent() { return visibilityPresent; }
@@ -104,6 +125,7 @@ public final class ArchiveRequests {
 		public boolean ratingPresent() { return ratingPresent; }
 		public boolean menuPresent() { return menuPresent; }
 		public boolean pricePresent() { return pricePresent; }
+		public boolean menusPresent() { return menusPresent; }
 	}
 
 	public record CreateWishlistRequest(
@@ -168,13 +190,21 @@ public final class ArchiveRequests {
 		String menu,
 		@PositiveOrZero Long price,
 		String note,
-		String photo
+		String photo,
+		@Size(max = 10) List<@Valid RecordMenuRequest> menus
 	) {
 		public ConvertWishlistRequest(String id, String placeId, String placeName, String category, String date,
 			String memo, String address, RecordVisibility visibility, Instant visitAt, BigDecimal rating,
 			String menu, Long price, String note, String photo) {
 			this(id, placeId, placeName, category, date, memo, address, null, null, visibility, visitAt,
-				rating, menu, price, note, photo);
+				rating, menu, price, note, photo, null);
+		}
+
+		public ConvertWishlistRequest(String id, String placeId, String placeName, String category, String date,
+			String memo, String address, BigDecimal latitude, BigDecimal longitude, RecordVisibility visibility,
+			Instant visitAt, BigDecimal rating, String menu, Long price, String note, String photo) {
+			this(id, placeId, placeName, category, date, memo, address, latitude, longitude, visibility, visitAt,
+				rating, menu, price, note, photo, null);
 		}
 	}
 

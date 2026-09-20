@@ -24,6 +24,8 @@ import com.mytastelog.server.archive.dto.ArchiveRequests.CreateRecordRequest;
 import com.mytastelog.server.archive.dto.ArchiveRequests.CreateWishlistRequest;
 import com.mytastelog.server.archive.dto.ArchiveRequests.CreateRevisitIntentRequest;
 import com.mytastelog.server.archive.dto.ArchiveRequests.ReplaceCollectionOrderRequest;
+import com.mytastelog.server.archive.dto.ArchiveRequests.RecordMenuRequest;
+import com.mytastelog.server.archive.dto.ArchiveRequests.UpdateRecordRequest;
 import com.mytastelog.server.collection.CollectionItemRepository;
 import com.mytastelog.server.collection.CollectionRepository;
 import com.mytastelog.server.diary.DiaryRepository;
@@ -31,6 +33,7 @@ import com.mytastelog.server.diary.DiaryTheme;
 import com.mytastelog.server.exception.ApiErrorCode;
 import com.mytastelog.server.exception.ApiException;
 import com.mytastelog.server.record.RecordRepository;
+import com.mytastelog.server.record.RecordMenuRepository;
 import com.mytastelog.server.record.RecordVisibility;
 import com.mytastelog.server.wishlist.WishlistRepository;
 import com.mytastelog.server.revisit.RevisitIntentRepository;
@@ -42,6 +45,7 @@ class ArchiveServiceIntegrationTest {
 	@Autowired AccountRepository accounts;
 	@Autowired DiaryRepository diaries;
 	@Autowired RecordRepository records;
+	@Autowired RecordMenuRepository recordMenus;
 	@Autowired WishlistRepository wishlist;
 	@Autowired CollectionRepository collections;
 	@Autowired CollectionItemRepository collectionItems;
@@ -54,10 +58,152 @@ class ArchiveServiceIntegrationTest {
 		collectionItems.deleteAll();
 		collections.deleteAll();
 		revisitIntents.deleteAll();
+		recordMenus.deleteAll();
 		records.deleteAll();
 		wishlist.deleteAll();
 		diaries.deleteAll();
 		accounts.deleteAll();
+	}
+
+	@Test
+	void recordMenusCreateNormalizesPositionsAndDualWritesFirstMenu() {
+		String owner = account();
+		diary(owner, "diary-a");
+		CreateRecordRequest request = recordRequestWithMenus("record-menus", "diary-a", List.of(
+			new RecordMenuRequest("menu-b", "비빔밥", 10000L, 8),
+			new RecordMenuRequest("menu-a", "국밥", 9000L, -3)));
+
+		var response = service.createRecord(owner, request).value();
+
+		assertThat(response.menus()).extracting(value -> value.id()).containsExactly("menu-b", "menu-a");
+		assertThat(response.menus()).extracting(value -> value.position()).containsExactly(0, 1);
+		assertThat(response.menu()).isEqualTo("비빔밥");
+		assertThat(response.price()).isEqualTo(10000L);
+		assertThat(recordMenus.findByRecord_IdOrderByPositionAsc("record-menus"))
+			.extracting(value -> value.getPhotoReference()).containsOnlyNulls();
+	}
+
+	@Test
+	void recordMenusSupportNullPriceZeroPriceAndAuthoritativeEmptyList() {
+		String owner = account();
+		diary(owner, "diary-a");
+		service.createRecord(owner, recordRequestWithMenus("record-menus", "diary-a", List.of(
+			new RecordMenuRequest("menu-a", "무료", 0L, null),
+			new RecordMenuRequest("menu-b", "시가", null, null))));
+
+		UpdateRecordRequest update = new UpdateRecordRequest();
+		update.setMenus(List.of());
+		var response = service.updateRecord(owner, "record-menus", update);
+
+		assertThat(response.menus()).isEmpty();
+		assertThat(response.menu()).isNull();
+		assertThat(response.price()).isNull();
+		assertThat(recordMenus.findByRecord_IdOrderByPositionAsc("record-menus")).isEmpty();
+	}
+
+	@Test
+	void recordMenusCreateSupportsZeroAndMaximumTenMenus() {
+		String owner = account();
+		diary(owner, "diary-a");
+		var empty = service.createRecord(owner,
+			recordRequestWithMenus("record-empty", "diary-a", List.of())).value();
+		List<RecordMenuRequest> ten = java.util.stream.IntStream.range(0, 10)
+			.mapToObj(index -> new RecordMenuRequest("max-" + index, "Menu " + index, (long) index, 99))
+			.toList();
+		var maximum = service.createRecord(owner,
+			recordRequestWithMenus("record-maximum", "diary-a", ten)).value();
+
+		assertThat(empty.menus()).isEmpty();
+		assertThat(empty.menu()).isNull();
+		assertThat(empty.price()).isNull();
+		assertThat(maximum.menus()).hasSize(10);
+		assertThat(maximum.menus()).extracting(value -> value.position())
+			.containsExactly(0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
+	}
+
+	@Test
+	void recordMenusUpdateReordersAndFullyReplacesRows() {
+		String owner = account();
+		diary(owner, "diary-a");
+		service.createRecord(owner, recordRequestWithMenus("record-menus", "diary-a", List.of(
+			new RecordMenuRequest("menu-a", "A", 1000L, null),
+			new RecordMenuRequest("menu-b", "B", 2000L, null))));
+		UpdateRecordRequest update = new UpdateRecordRequest();
+		update.setMenus(List.of(
+			new RecordMenuRequest("menu-b", "B2", 2500L, 99),
+			new RecordMenuRequest("menu-c", "C", 3000L, 0)));
+
+		var response = service.updateRecord(owner, "record-menus", update);
+
+		assertThat(response.menus()).extracting(value -> value.id()).containsExactly("menu-b", "menu-c");
+		assertThat(response.menus()).extracting(value -> value.name()).containsExactly("B2", "C");
+		assertThat(response.menus()).extracting(value -> value.position()).containsExactly(0, 1);
+		assertThat(recordMenus.findById("menu-a")).isEmpty();
+	}
+
+	@Test
+	void recordMenusRejectLimitsInvalidNamesDuplicateIdsAndCrossRecordIds() {
+		String owner = account();
+		diary(owner, "diary-a");
+		service.createRecord(owner, recordRequestWithMenus("record-a", "diary-a",
+			List.of(new RecordMenuRequest("shared-menu", "A", 1000L, null))));
+
+		assertConflict(() -> service.createRecord(owner, recordRequestWithMenus("record-b", "diary-a",
+			List.of(new RecordMenuRequest("shared-menu", "B", 2000L, null)))));
+		assertConflict(() -> service.createRecord(owner, recordRequestWithMenus("record-c", "diary-a", List.of(
+			new RecordMenuRequest("duplicate", "A", null, null),
+			new RecordMenuRequest("duplicate", "B", null, null)))));
+		assertValidation(() -> service.createRecord(owner, recordRequestWithMenus("record-d", "diary-a",
+			List.of(new RecordMenuRequest("blank", "  ", null, null)))));
+		assertValidation(() -> service.createRecord(owner, recordRequestWithMenus("record-e", "diary-a",
+			java.util.stream.IntStream.range(0, 11)
+				.mapToObj(index -> new RecordMenuRequest("menu-" + index, "M" + index, null, null)).toList())));
+	}
+
+	@Test
+	void legacyMenuRequestsRemainCompatibleAndOmittedMenusDoNotClearRows() {
+		String owner = account();
+		diary(owner, "diary-a");
+		var created = service.createRecord(owner, recordRequest("legacy-record", "diary-a")).value();
+		assertThat(created.menus()).singleElement().satisfies(menu -> {
+			assertThat(menu.name()).isEqualTo("menu");
+			assertThat(menu.price()).isEqualTo(12000L);
+			assertThat(menu.position()).isZero();
+		});
+
+		UpdateRecordRequest untouched = new UpdateRecordRequest();
+		untouched.setMemo("changed");
+		assertThat(service.updateRecord(owner, "legacy-record", untouched).menus()).hasSize(1);
+
+		UpdateRecordRequest legacyUpdate = new UpdateRecordRequest();
+		legacyUpdate.setMenu("legacy changed");
+		var updated = service.updateRecord(owner, "legacy-record", legacyUpdate);
+		assertThat(updated.menus()).singleElement().satisfies(menu -> {
+			assertThat(menu.name()).isEqualTo("legacy changed");
+			assertThat(menu.price()).isEqualTo(12000L);
+		});
+	}
+
+	@Test
+	void wishlistConversionCreatesFirstRecordMenuAndKeepsMenuPhotoEmpty() {
+		String owner = account();
+		diary(owner, "diary-a");
+		String representativePhoto = "photos/wishlist/550e8400-e29b-41d4-a716-446655440000.jpg";
+		service.createWishlist(owner, new CreateWishlistRequest("wish-menu", "diary-a", "wishlist", "place-w",
+			"Wishlist", "카페", "2026년 9월 8일", "memo", "서울", null, "라떼", 5500L, null,
+			representativePhoto));
+		ConvertWishlistRequest request = new ConvertWishlistRequest("record-menu", "place-w", "Wishlist", "카페",
+			"2026년 9월 8일", "memo", "서울", RecordVisibility.PRIVATE,
+			Instant.parse("2026-09-08T04:00:00Z"), new BigDecimal("4.0"), null, null, null, null);
+
+		var converted = service.convertWishlist(owner, "wish-menu", request).record();
+
+		assertThat(converted.menus()).singleElement().satisfies(menu -> {
+			assertThat(menu.name()).isEqualTo("라떼");
+			assertThat(menu.price()).isEqualTo(5500L);
+		});
+		assertThat(converted.photo()).isEqualTo(representativePhoto);
+		assertThat(recordMenus.findByRecord_IdOrderByPositionAsc("record-menu").getFirst().getPhotoReference()).isNull();
 	}
 
 	@Test
@@ -347,6 +493,13 @@ class ArchiveServiceIntegrationTest {
 			Instant.parse("2026-09-08T03:00:00Z"), new BigDecimal("4.5"), "menu", 12000L, "note", "photo-ref");
 	}
 
+	private CreateRecordRequest recordRequestWithMenus(String id, String diaryId, List<RecordMenuRequest> menus) {
+		return new CreateRecordRequest(id, diaryId, "record", "place-" + id, id, "한식",
+			"2026년 9월 8일", "memo", "서울", null, null, RecordVisibility.PRIVATE,
+			Instant.parse("2026-09-08T03:00:00Z"), new BigDecimal("4.5"), "ignored", 999L,
+			"note", null, menus);
+	}
+
 	private CreateWishlistRequest wishlistRequest(String id, String diaryId) {
 		return wishlistRequestForPlace(id, diaryId, "wishlist-place-id");
 	}
@@ -376,5 +529,11 @@ class ArchiveServiceIntegrationTest {
 		ApiException exception = assertThrows(ApiException.class, operation::run);
 		assertThat(exception.status()).isEqualTo(HttpStatus.NOT_FOUND);
 		assertThat(exception.code()).isEqualTo(ApiErrorCode.NOT_FOUND);
+	}
+
+	private void assertValidation(Runnable operation) {
+		ApiException exception = assertThrows(ApiException.class, operation::run);
+		assertThat(exception.status()).isEqualTo(HttpStatus.BAD_REQUEST);
+		assertThat(exception.code()).isEqualTo(ApiErrorCode.VALIDATION_ERROR);
 	}
 }

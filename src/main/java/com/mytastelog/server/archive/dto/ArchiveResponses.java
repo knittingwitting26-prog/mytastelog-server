@@ -17,12 +17,14 @@ public final class ArchiveResponses {
 		String id, String ownerId, String name, DiaryTheme theme, Instant createdAt, Instant updatedAt
 	) {}
 
+	public record RecordMenuResponse(String id, String name, Long price, int position) {}
+
 	public record RecordResponse(
 		String id, String ownerId, String diaryId, String placeId, String placeName, String category,
 		String date, String memo, String address, BigDecimal latitude, BigDecimal longitude,
 		BigDecimal rating, String menu, Long price,
 		String note, String photo, Instant createdAt, Instant updatedAt, String type,
-		RecordVisibility visibility, Instant visitAt
+		RecordVisibility visibility, Instant visitAt, List<RecordMenuResponse> menus
 	) {}
 
 	public record WishlistResponse(
