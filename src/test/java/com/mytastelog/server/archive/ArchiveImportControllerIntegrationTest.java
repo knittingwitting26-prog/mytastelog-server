@@ -28,6 +28,7 @@ import com.mytastelog.server.collection.CollectionItemRepository;
 import com.mytastelog.server.collection.CollectionRepository;
 import com.mytastelog.server.diary.DiaryRepository;
 import com.mytastelog.server.record.RecordRepository;
+import com.mytastelog.server.record.RecordMenuRepository;
 import com.mytastelog.server.revisit.RevisitIntentRepository;
 import com.mytastelog.server.wishlist.WishlistRepository;
 
@@ -39,6 +40,7 @@ class ArchiveImportControllerIntegrationTest {
 	@Autowired AccountRepository accounts;
 	@Autowired DiaryRepository diaries;
 	@Autowired RecordRepository records;
+	@Autowired RecordMenuRepository recordMenus;
 	@Autowired WishlistRepository wishlist;
 	@Autowired CollectionRepository collections;
 	@Autowired CollectionItemRepository relations;
@@ -51,6 +53,7 @@ class ArchiveImportControllerIntegrationTest {
 		relations.deleteAll();
 		collections.deleteAll();
 		revisits.deleteAll();
+		recordMenus.deleteAll();
 		records.deleteAll();
 		wishlist.deleteAll();
 		diaries.deleteAll();
@@ -131,6 +134,42 @@ class ArchiveImportControllerIntegrationTest {
 			.contains("device-a", "device-b");
 	}
 
+	@Test
+	void importsMultipleMenusAndReplaysWithoutDuplicates() throws Exception {
+		String accountId = account();
+		RequestPostProcessor owner = asAccount(accountId);
+		String payload = menuManifest("menu-transfer");
+
+		mvc.perform(post("/api/v1/archive/imports").with(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+			.content(payload)).andExpect(status().isCreated()).andExpect(jsonPath("$.data.cleanupAllowed").value(true));
+
+		assertThat(recordMenus.findAll()).hasSize(3)
+			.extracting(menu -> List.of(menu.getId(), menu.getName(), menu.getPrice(), (long) menu.getPosition()))
+			.containsExactlyInAnyOrder(
+				List.of("menu-a", "A", 0L, 0L),
+				List.of("menu-b", "B", 15000L, 1L),
+				List.of("menu-c", "C", 30000L, 2L));
+
+		mvc.perform(post("/api/v1/archive/imports").with(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+			.content(payload)).andExpect(status().isCreated())
+			.andExpect(jsonPath("$.data.items[1].status").value("ALREADY_IMPORTED"));
+		assertThat(recordMenus.findAll()).hasSize(3);
+	}
+
+	@Test
+	void legacyPriceOnlyImportRemainsSupported() throws Exception {
+		String accountId = account();
+		mvc.perform(post("/api/v1/archive/imports").with(asAccount(accountId)).with(csrf())
+			.contentType(MediaType.APPLICATION_JSON).content(legacyPriceOnlyManifest("price-only-transfer")))
+			.andExpect(status().isCreated()).andExpect(jsonPath("$.data.status").value("COMPLETE"));
+
+		assertThat(recordMenus.findAll()).singleElement().satisfies(menu -> {
+			assertThat(menu.getName()).isNull();
+			assertThat(menu.getPrice()).isEqualTo(9000L);
+			assertThat(menu.getPosition()).isZero();
+		});
+	}
+
 	private String account() { return accounts.saveAndFlush(AccountEntity.create()).getId(); }
 
 	private RequestPostProcessor asAccount(String accountId) {
@@ -147,6 +186,24 @@ class ArchiveImportControllerIntegrationTest {
 			"revisits":[{"transferId":"%1$s","sourceLocalId":"local-revisit","entity":"revisit","payload":{"id":"local-revisit","diaryId":"local-diary","placeId":"place-a"}}],
 			"collections":[{"transferId":"%1$s","sourceLocalId":"local-collection","entity":"collection","payload":{"id":"local-collection","diaryId":"local-diary","name":"Collection","memo":"","itemIds":[]}}],
 			"relations":[{"transferId":"%1$s","sourceLocalId":"local-collection:local-record","entity":"collection-relation","collectionLocalId":"local-collection","itemLocalId":"local-record"}],"photos":[]}
+			""".formatted(transferId);
+	}
+
+	private String menuManifest(String transferId) {
+		return """
+			{"contractVersion":"v1","transferId":"%1$s","sourceSchemaVersion":3,
+			"diaries":[{"transferId":"%1$s","sourceLocalId":"local-diary","entity":"diary","name":"Local","theme":"notebook","active":true}],
+			"records":[{"transferId":"%1$s","sourceLocalId":"local-record","entity":"record","payload":{"id":"local-record","diaryId":"local-diary","type":"record","placeId":"place-menu","placeName":"Place","category":"한식","date":"date","memo":"memo","address":"서울","visibility":"private","visitAt":"2026-09-12T00:00:00Z","menus":[{"id":"menu-a","name":"A","price":0,"position":0},{"id":"menu-b","name":"B","price":15000,"position":1},{"id":"menu-c","name":"C","price":30000,"position":2}]}}],
+			"wishlist":[],"revisits":[],"collections":[],"relations":[],"photos":[]}
+			""".formatted(transferId);
+	}
+
+	private String legacyPriceOnlyManifest(String transferId) {
+		return """
+			{"contractVersion":"v1","transferId":"%1$s","sourceSchemaVersion":2,
+			"diaries":[{"transferId":"%1$s","sourceLocalId":"local-diary","entity":"diary","name":"Local","theme":"notebook","active":true}],
+			"records":[{"transferId":"%1$s","sourceLocalId":"local-record","entity":"record","payload":{"id":"local-record","diaryId":"local-diary","type":"record","placeId":"place-price","placeName":"Place","category":"한식","date":"date","memo":"memo","address":"서울","visibility":"private","visitAt":"2026-09-12T00:00:00Z","price":9000}}],
+			"wishlist":[],"revisits":[],"collections":[],"relations":[],"photos":[]}
 			""".formatted(transferId);
 	}
 }

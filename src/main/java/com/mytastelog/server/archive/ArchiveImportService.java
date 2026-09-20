@@ -73,7 +73,7 @@ public class ArchiveImportService {
 			CreateRecordRequest local = source.payload();
 			String diaryId = requireMapping(diaryIds, local.diaryId(), "records.diaryId");
 			String id = serverId(accountId, request.transferId(), "record", source.sourceLocalId());
-			var created = archives.createRecord(accountId, new CreateRecordRequest(id, diaryId, "record", local.placeId(), local.placeName(), local.category(), local.date(), local.memo(), local.address(), local.latitude(), local.longitude(), local.visibility(), local.visitAt(), local.rating(), local.menu(), local.price(), local.note(), null));
+			var created = archives.createRecord(accountId, new CreateRecordRequest(id, diaryId, "record", local.placeId(), local.placeName(), local.category(), local.date(), local.memo(), local.address(), local.latitude(), local.longitude(), local.visibility(), local.visitAt(), local.rating(), local.menu(), local.price(), local.note(), null, local.menus()));
 			itemIds.put(source.sourceLocalId(), created.value().id());
 			remember(accountId, request.transferId(), "record", source.sourceLocalId(), created.value().id(), IMPORTED);
 			results.add(result(request.transferId(), source.sourceLocalId(), "record", IMPORTED, created.value().id(), null));
