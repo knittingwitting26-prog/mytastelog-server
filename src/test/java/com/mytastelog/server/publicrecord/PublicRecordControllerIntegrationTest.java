@@ -73,7 +73,8 @@ class PublicRecordControllerIntegrationTest {
 			.andExpect(jsonPath("$.data[0].price").doesNotExist())
 			.andExpect(jsonPath("$.data[0].memo").doesNotExist())
 			.andExpect(jsonPath("$.data[0].visitAt").doesNotExist())
-			.andExpect(jsonPath("$.data[0].ownerId").doesNotExist());
+			.andExpect(jsonPath("$.data[0].ownerId").doesNotExist())
+			.andExpect(jsonPath("$.data[0].menus").doesNotExist());
 		mvc.perform(get("/api/v1/public/records").param("north", "38").param("south", "37")
 			.param("east", "127").param("west", "126"))
 			.andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(1));
@@ -91,7 +92,8 @@ class PublicRecordControllerIntegrationTest {
 			.andExpect(jsonPath("$.data.menu").value("menu"))
 			.andExpect(jsonPath("$.data.price").doesNotExist())
 			.andExpect(jsonPath("$.data.memo").doesNotExist()).andExpect(jsonPath("$.data.visitAt").doesNotExist())
-			.andExpect(jsonPath("$.data.ownerId").doesNotExist()).andExpect(jsonPath("$.data.diaryId").doesNotExist());
+			.andExpect(jsonPath("$.data.ownerId").doesNotExist()).andExpect(jsonPath("$.data.diaryId").doesNotExist())
+			.andExpect(jsonPath("$.data.menus").doesNotExist());
 		var principal = new AuthenticatedAccount(owner);
 		var auth = new UsernamePasswordAuthenticationToken(principal, "n/a", principal.getAuthorities());
 		mvc.perform(get("/api/v1/archive").with(authentication(auth)))

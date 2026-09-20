@@ -2,6 +2,7 @@ package com.mytastelog.server.photo;
 
 public enum PhotoEntityType {
 	RECORD("records"),
+	RECORD_MENU("record-menus"),
 	WISHLIST("wishlist"),
 	COLLECTION("collections");
 

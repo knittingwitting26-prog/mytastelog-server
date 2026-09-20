@@ -11,9 +11,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -208,7 +210,14 @@ public class ArchiveService {
 		requireDiaryForUpdate(accountId, diaryId);
 		String placeId = entity.getPlaceId();
 		String photoReference = entity.getPhotoReference();
+		List<RecordMenuEntity> menus = recordMenus.findByRecord_IdOrderByPositionAsc(id);
+		List<String> menuPhotoReferences = menus.stream()
+			.map(RecordMenuEntity::getPhotoReference)
+			.filter(Objects::nonNull)
+			.toList();
 		cleanupRelations(id);
+		recordMenus.deleteAll(menus);
+		recordMenus.flush();
 		records.delete(entity);
 		globalItemIds.deleteById(id);
 		records.flush();
@@ -216,6 +225,7 @@ public class ArchiveService {
 			revisitIntents.deleteAllByOwner_IdAndDiary_IdAndPlaceId(accountId, diaryId, placeId);
 		}
 		photos.cleanupAfterCommit(photoReference);
+		menuPhotoReferences.forEach(photos::cleanupAfterCommit);
 	}
 
 	@Transactional
@@ -597,20 +607,33 @@ public class ArchiveService {
 	}
 
 	private void replaceMenus(RecordEntity record, List<MenuValue> menus) {
+		List<RecordMenuEntity> existingMenus = recordMenus.findByRecord_IdOrderByPositionAsc(record.getId());
+		Map<String, String> existingPhotos = existingMenus.stream()
+			.filter(menu -> menu.getPhotoReference() != null)
+			.collect(Collectors.toMap(RecordMenuEntity::getId,
+				RecordMenuEntity::getPhotoReference, (left, right) -> left));
 		for (MenuValue menu : menus) {
 			recordMenus.findById(menu.id()).ifPresent(existing -> {
 				if (!existing.getRecord().getId().equals(record.getId()))
 					throw conflict("이미 다른 Record에서 사용 중인 메뉴 ID입니다.", "menus.id");
 			});
 		}
-		recordMenus.deleteAll(recordMenus.findByRecord_IdOrderByPositionAsc(record.getId()));
+		Set<String> retainedIds = menus.stream().map(MenuValue::id).collect(Collectors.toSet());
+		List<String> removedPhotoReferences = existingMenus.stream()
+			.filter(menu -> !retainedIds.contains(menu.getId()))
+			.map(RecordMenuEntity::getPhotoReference)
+			.filter(Objects::nonNull)
+			.toList();
+		recordMenus.deleteAll(existingMenus);
 		recordMenus.flush();
 		if (!menus.isEmpty()) {
 			recordMenus.saveAll(menus.stream()
-				.map(menu -> new RecordMenuEntity(menu.id(), record, menu.name(), menu.price(), menu.position()))
+				.map(menu -> new RecordMenuEntity(menu.id(), record, menu.name(), menu.price(), menu.position(),
+					existingPhotos.get(menu.id())))
 				.toList());
 			recordMenus.flush();
 		}
+		removedPhotoReferences.forEach(photos::cleanupAfterCommit);
 	}
 
 	private record MenuValue(String id, String name, Long price, int position) {}

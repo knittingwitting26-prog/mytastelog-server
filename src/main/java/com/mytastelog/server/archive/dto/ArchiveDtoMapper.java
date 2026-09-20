@@ -33,7 +33,9 @@ public final class ArchiveDtoMapper {
 	}
 
 	public static RecordMenuResponse recordMenu(RecordMenuEntity entity) {
-		return new RecordMenuResponse(entity.getId(), entity.getName(), entity.getPrice(), entity.getPosition());
+		String photoUrl = entity.getPhotoReference() == null ? null
+			: "/api/v1/records/" + entity.getRecord().getId() + "/menus/" + entity.getId() + "/photo";
+		return new RecordMenuResponse(entity.getId(), entity.getName(), entity.getPrice(), entity.getPosition(), photoUrl);
 	}
 
 	public static WishlistResponse wishlist(WishlistEntity entity) {

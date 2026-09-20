@@ -41,6 +41,7 @@ import com.mytastelog.server.archive.dto.ArchiveRequests.CreateCollectionRequest
 import com.mytastelog.server.archive.dto.ArchiveRequests.CreateDiaryRequest;
 import com.mytastelog.server.archive.dto.ArchiveRequests.CreateRecordRequest;
 import com.mytastelog.server.archive.dto.ArchiveRequests.CreateWishlistRequest;
+import com.mytastelog.server.archive.dto.ArchiveRequests.RecordMenuRequest;
 import com.mytastelog.server.diary.DiaryTheme;
 import com.mytastelog.server.record.RecordVisibility;
 
@@ -58,23 +59,27 @@ class PhotoControllerIntegrationTest {
 
 	String owner;
 	String other;
+	String diaryId;
 	String recordId;
 	String wishlistId;
 	String collectionId;
+	String menuId;
 
 	@BeforeEach
 	void setup() {
 		String suffix = UUID.randomUUID().toString();
-		String diaryId = "photo-diary-" + suffix;
+		diaryId = "photo-diary-" + suffix;
 		recordId = "photo-record-" + suffix;
 		wishlistId = "photo-wish-" + suffix;
 		collectionId = "photo-collection-" + suffix;
+		menuId = "photo-menu-" + suffix;
 		owner = accounts.saveAndFlush(AccountEntity.create()).getId();
 		other = accounts.saveAndFlush(AccountEntity.create()).getId();
 		archive.createDiary(owner, new CreateDiaryRequest(diaryId, "Diary", DiaryTheme.NOTEBOOK));
 		archive.createRecord(owner, new CreateRecordRequest(recordId, diaryId, "record", "record-place",
-			"Record", "food", "date", "memo", "address", RecordVisibility.PRIVATE,
-			Instant.parse("2026-09-08T03:00:00Z"), null, null, null, null, null));
+			"Record", "food", "date", "memo", "address", null, null, RecordVisibility.PRIVATE,
+			Instant.parse("2026-09-08T03:00:00Z"), null, null, null, null, null,
+			List.of(new RecordMenuRequest(menuId, "Menu", 1000L, 0))));
 		archive.createWishlist(owner, new CreateWishlistRequest(wishlistId, diaryId, "wishlist", "wish-place",
 			"Wish", "cafe", "date", "memo", "address", null, null, null, null, null));
 		archive.createCollection(owner, new CreateCollectionRequest(collectionId, diaryId, "Collection",
@@ -86,6 +91,35 @@ class PhotoControllerIntegrationTest {
 		assertRoundTrip("/api/v1/records/" + recordId + "/photo");
 		assertRoundTrip("/api/v1/wishlist/" + wishlistId + "/photo");
 		assertRoundTrip("/api/v1/collections/" + collectionId + "/photo");
+		assertRoundTrip("/api/v1/records/" + recordId + "/menus/" + menuId + "/photo");
+	}
+
+	@Test
+	void menuEndpointRejectsForeignOwnerMissingParentAndWrongParentMembership() throws Exception {
+		String secondRecordId = "photo-record-second-" + UUID.randomUUID();
+		String secondMenuId = "photo-menu-second-" + UUID.randomUUID();
+		archive.createRecord(owner, new CreateRecordRequest(secondRecordId, diaryId, "record", "second-place",
+			"Second", "food", "date", "memo", "address", null, null, RecordVisibility.PRIVATE,
+			Instant.parse("2026-09-08T03:00:00Z"), null, null, null, null, null,
+			List.of(new RecordMenuRequest(secondMenuId, "Second menu", 2000L, 0))));
+		MockHttpSession otherSession = authenticatedSession(other);
+		CsrfExchange otherCsrf = csrf(otherSession);
+		String menuUrl = "/api/v1/records/" + recordId + "/menus/" + menuId + "/photo";
+		mvc.perform(multipart(menuUrl).file(jpeg()).session(otherSession)
+				.header(otherCsrf.headerName(), otherCsrf.token()))
+			.andExpect(status().isForbidden()).andExpect(jsonPath("$.error.code").value("FORBIDDEN"));
+
+		MockHttpSession ownerSession = authenticatedSession(owner);
+		CsrfExchange ownerCsrf = csrf(ownerSession);
+		mvc.perform(multipart("/api/v1/records/missing/menus/" + menuId + "/photo").file(jpeg())
+				.session(ownerSession).header(ownerCsrf.headerName(), ownerCsrf.token()))
+			.andExpect(status().isNotFound()).andExpect(jsonPath("$.error.code").value("NOT_FOUND"));
+		mvc.perform(multipart("/api/v1/records/" + recordId + "/menus/missing/photo").file(jpeg())
+				.session(ownerSession).header(ownerCsrf.headerName(), ownerCsrf.token()))
+			.andExpect(status().isNotFound()).andExpect(jsonPath("$.error.code").value("NOT_FOUND"));
+		mvc.perform(multipart("/api/v1/records/" + recordId + "/menus/" + secondMenuId + "/photo").file(jpeg())
+				.session(ownerSession).header(ownerCsrf.headerName(), ownerCsrf.token()))
+			.andExpect(status().isNotFound()).andExpect(jsonPath("$.error.code").value("NOT_FOUND"));
 	}
 
 	@Test
@@ -192,7 +226,7 @@ class PhotoControllerIntegrationTest {
 		@Override public PhotoContent read(String key) { return content.get(key); }
 		@Override public void delete(String key) { content.remove(key); }
 		@Override public boolean isManagedReference(String value) {
-			return value != null && value.matches("photos/(records|wishlist|collections)/[0-9a-f-]{36}\\.jpg");
+			return value != null && value.matches("photos/(records|record-menus|wishlist|collections)/[0-9a-f-]{36}\\.jpg");
 		}
 	}
 }

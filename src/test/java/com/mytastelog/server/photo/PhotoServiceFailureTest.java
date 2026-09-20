@@ -13,6 +13,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import com.mytastelog.server.account.AccountEntity;
 import com.mytastelog.server.collection.CollectionRepository;
 import com.mytastelog.server.record.RecordEntity;
+import com.mytastelog.server.record.RecordMenuRepository;
 import com.mytastelog.server.record.RecordRepository;
 import com.mytastelog.server.wishlist.WishlistRepository;
 
@@ -23,6 +24,7 @@ class PhotoServiceFailureTest {
 	@Test
 	void databaseFlushFailureBestEffortDeletesNewObject() {
 		RecordRepository records = mock(RecordRepository.class);
+		RecordMenuRepository recordMenus = mock(RecordMenuRepository.class);
 		WishlistRepository wishlist = mock(WishlistRepository.class);
 		CollectionRepository collections = mock(CollectionRepository.class);
 		PhotoStorage storage = mock(PhotoStorage.class);
@@ -38,7 +40,7 @@ class PhotoServiceFailureTest {
 			org.mockito.ArgumentMatchers.any(PhotoContent.class))).thenReturn(newKey);
 		when(storage.isManagedReference(org.mockito.ArgumentMatchers.any())).thenReturn(true);
 		org.mockito.Mockito.doThrow(new PersistenceException("db failed")).when(entityManager).flush();
-		PhotoService service = new PhotoService(records, wishlist, collections, new PhotoFileValidator(), storage,
+		PhotoService service = new PhotoService(records, recordMenus, wishlist, collections, new PhotoFileValidator(), storage,
 			entityManager);
 
 		assertThatThrownBy(() -> service.uploadRecord("owner", "record", new MockMultipartFile("file", "x.jpg",

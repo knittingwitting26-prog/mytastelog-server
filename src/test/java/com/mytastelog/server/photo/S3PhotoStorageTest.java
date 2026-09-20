@@ -49,11 +49,26 @@ class S3PhotoStorageTest {
 	void recognizesOnlyServerManagedKeysAndFailsClearlyWhenConfigIsOff() {
 		S3PhotoStorage storage = new S3PhotoStorage(new PhotoS3Properties("", ""));
 		assertThat(storage.isManagedReference("photos/wishlist/550e8400-e29b-41d4-a716-446655440000.webp")).isTrue();
+		assertThat(storage.isManagedReference("photos/record-menus/550e8400-e29b-41d4-a716-446655440000.jpg")).isTrue();
 		assertThat(storage.isManagedReference("https://example.com/photo.jpg")).isFalse();
 		assertThat(storage.isManagedReference("local-photo:1")).isFalse();
 		assertThat(storage.isManagedReference("photos/records/not-a-uuid.jpg")).isFalse();
 		assertThatThrownBy(storage::assertConfigured).isInstanceOfSatisfying(PhotoStorageException.class,
 			exception -> assertThat(exception.operation()).isEqualTo(PhotoStorageException.Operation.CONFIGURATION));
+	}
+
+	@Test
+	void menuPhotosUseDedicatedOpaquePrefixAndValidatedExtension() {
+		S3Client client = mock(S3Client.class);
+		when(client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
+			.thenReturn(PutObjectResponse.builder().build());
+		S3PhotoStorage storage = new S3PhotoStorage(new PhotoS3Properties("ap-northeast-2", "bucket"), client);
+
+		String key = storage.store(PhotoEntityType.RECORD_MENU,
+			new PhotoContent("RIFF1234WEBP".getBytes(java.nio.charset.StandardCharsets.US_ASCII), "image/webp"));
+
+		assertThat(key).matches("photos/record-menus/[0-9a-f-]{36}\\.webp");
+		assertThat(storage.isManagedReference(key)).isTrue();
 	}
 
 	@SuppressWarnings({"unchecked", "rawtypes"})

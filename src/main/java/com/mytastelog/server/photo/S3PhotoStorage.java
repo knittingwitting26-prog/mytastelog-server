@@ -21,7 +21,7 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 @Component
 public class S3PhotoStorage implements PhotoStorage {
 	private static final Pattern MANAGED_KEY = Pattern.compile(
-		"photos/(records|wishlist|collections)/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\.(jpg|png|webp)");
+		"photos/(records|record-menus|wishlist|collections)/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\.(jpg|png|webp)");
 
 	private final PhotoS3Properties properties;
 	private volatile S3Client client;

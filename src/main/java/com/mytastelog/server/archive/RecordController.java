@@ -77,4 +77,26 @@ public class RecordController {
 		photos.deleteRecordPhoto(accountContext.requireAccountId(authentication), id);
 		return ResponseEntity.noContent().build();
 	}
+
+	@PostMapping(value = "/{recordId}/menus/{menuId}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+	ApiSuccess<PhotoResponse> uploadMenuPhoto(Authentication authentication, @PathVariable String recordId,
+		@PathVariable String menuId, @RequestPart("file") MultipartFile file) {
+		return new ApiSuccess<>(photos.uploadRecordMenu(accountContext.requireAccountId(authentication), recordId,
+			menuId, file));
+	}
+
+	@GetMapping("/{recordId}/menus/{menuId}/photo")
+	ResponseEntity<byte[]> readMenuPhoto(Authentication authentication, @PathVariable String recordId,
+		@PathVariable String menuId) {
+		var photo = photos.readRecordMenu(accountContext.requireAccountId(authentication), recordId, menuId);
+		return ResponseEntity.ok().contentType(MediaType.parseMediaType(photo.contentType()))
+			.cacheControl(CacheControl.noStore()).contentLength(photo.bytes().length).body(photo.bytes());
+	}
+
+	@DeleteMapping("/{recordId}/menus/{menuId}/photo")
+	ResponseEntity<Void> deleteMenuPhoto(Authentication authentication, @PathVariable String recordId,
+		@PathVariable String menuId) {
+		photos.deleteRecordMenuPhoto(accountContext.requireAccountId(authentication), recordId, menuId);
+		return ResponseEntity.noContent().build();
+	}
 }

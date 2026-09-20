@@ -17,7 +17,7 @@ public final class ArchiveResponses {
 		String id, String ownerId, String name, DiaryTheme theme, Instant createdAt, Instant updatedAt
 	) {}
 
-	public record RecordMenuResponse(String id, String name, Long price, int position) {}
+	public record RecordMenuResponse(String id, String name, Long price, int position, String photoUrl) {}
 
 	public record RecordResponse(
 		String id, String ownerId, String diaryId, String placeId, String placeName, String category,
