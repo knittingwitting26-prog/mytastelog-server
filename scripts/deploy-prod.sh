@@ -9,6 +9,8 @@ REMOTE_JAR="${REMOTE_JAR:-/opt/mytastelog/mytastelog-server.jar}"
 REMOTE_ENV="${REMOTE_ENV:-/etc/mytastelog/mytastelog.env}"
 LOCAL_JAR="${LOCAL_JAR:-target/mytastelog-server-0.0.1-SNAPSHOT.jar}"
 SMOKE_URL="${SMOKE_URL:-https://archive-api.knittingwitting.com/api/v1/public/records?limit=1}"
+SMOKE_RETRY_INTERVAL_SECONDS="${SMOKE_RETRY_INTERVAL_SECONDS:-3}"
+SMOKE_MAX_ATTEMPTS="${SMOKE_MAX_ATTEMPTS:-10}"
 
 CURRENT_STEP="initialization"
 
@@ -32,6 +34,37 @@ require_command() {
 	command -v "$1" >/dev/null 2>&1 || fail "Required command not found: $1"
 }
 
+request_smoke_http_code() {
+	curl --fail --silent --location --max-time 30 \
+		-o /dev/null -w '%{http_code}' "$SMOKE_URL"
+}
+
+public_api_smoke_check() {
+	local attempt
+	local http_code=""
+	for ((attempt = 1; attempt <= SMOKE_MAX_ATTEMPTS; attempt++)); do
+		http_code=""
+		if http_code="$(request_smoke_http_code "$attempt")" \
+			&& [[ "$http_code" =~ ^2[0-9][0-9]$ ]]; then
+			SMOKE_HTTP_CODE="$http_code"
+			printf 'Public API smoke check: PASS (HTTP %s)\n' "$SMOKE_HTTP_CODE"
+			return 0
+		fi
+
+		if ((attempt < SMOKE_MAX_ATTEMPTS)); then
+			printf 'Public API not ready (%d/%d), retrying in %ss...\n' \
+				"$attempt" "$SMOKE_MAX_ATTEMPTS" "$SMOKE_RETRY_INTERVAL_SECONDS"
+			sleep "$SMOKE_RETRY_INTERVAL_SECONDS"
+		else
+			printf 'Public API not ready (%d/%d), attempts exhausted\n' \
+				"$attempt" "$SMOKE_MAX_ATTEMPTS"
+		fi
+	done
+
+	SMOKE_HTTP_CODE="${http_code:-unavailable}"
+	return 1
+}
+
 normalize_path() {
 	local path=$1
 	if [[ "$path" =~ ^[A-Za-z]:[\\/].* ]]; then
@@ -53,6 +86,11 @@ require_command git
 require_command ssh
 require_command scp
 require_command curl
+
+[[ "$SMOKE_RETRY_INTERVAL_SECONDS" =~ ^[1-9][0-9]*$ ]] \
+	|| fail "SMOKE_RETRY_INTERVAL_SECONDS must be a positive integer"
+[[ "$SMOKE_MAX_ATTEMPTS" =~ ^[1-9][0-9]*$ ]] \
+	|| fail "SMOKE_MAX_ATTEMPTS must be a positive integer"
 
 [[ -f pom.xml ]] || fail "pom.xml was not found at $REPO_ROOT"
 grep -Fq '<artifactId>mytastelog-server</artifactId>' pom.xml \
@@ -205,9 +243,9 @@ SERVICE_STATE="$(awk -F= '$1 == "SERVICE_STATE" { print substr($0, index($0, "="
 
 CURRENT_STEP="public API smoke check"
 printf '\n[%s] GET %s\n' "$CURRENT_STEP" "$SMOKE_URL"
-SMOKE_HTTP_CODE="$(curl --fail --silent --show-error --location --max-time 30 \
-	-o /dev/null -w '%{http_code}' "$SMOKE_URL")"
-[[ "$SMOKE_HTTP_CODE" =~ ^2[0-9][0-9]$ ]] || fail "Smoke check returned HTTP $SMOKE_HTTP_CODE"
+if ! public_api_smoke_check; then
+	fail "Public API did not become ready after $SMOKE_MAX_ATTEMPTS attempts (last HTTP: $SMOKE_HTTP_CODE)"
+fi
 
 trap - ERR
 printf '\nDEPLOY SUCCESS\n'
