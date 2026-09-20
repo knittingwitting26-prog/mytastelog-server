@@ -85,7 +85,7 @@ class BackendFoundationIntegrationTest {
 			from flyway_schema_history
 			where success = true and version is not null
 			order by installed_rank
-			""", String.class)).containsExactly("1", "2", "3", "4", "5", "6");
+			""", String.class)).containsExactly("1", "2", "3", "4", "5", "6", "7");
 		assertThat(jdbcTemplate.queryForObject("""
 			select count(*)
 			from information_schema.columns
